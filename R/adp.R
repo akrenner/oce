@@ -231,7 +231,7 @@ setClass("adp", contains="oce")
 #' Sample adp (acoustic-doppler profiler) dataset
 #'
 #' This is degraded subsample of measurements that were made with an
-#' upward-pointing ADP manufactured by Teledyne-RDI, as part of the St Lawrence
+#' upward-pointing, moored, ADP manufactured by Teledyne-RDI, as part of the St Lawrence
 #' Internal Wave Experiment (SLEIWEX).
 #'
 #' @name adp
@@ -446,11 +446,13 @@ setMethod(f="summary",
                             "\n", sep=''))
               }
               v.dim <- dim(object[["v"]])
-              if (!is.ad2cp(object)) {
-                  cat("* Number of profiles:", v.dim[1], "\n")
-                  cat("* Number of cells:   ", v.dim[2], "\n")
-                  cat("* Number of beams:   ", v.dim[3], "\n")
-                  cat("* Cell size:         ", object[["cellSize"]], "m\n")
+              isAD2CP <- is.ad2cp(object)
+              if (!isAD2CP) {
+                  cat("* Number of beams:    ", v.dim[3], "\n", sep="")
+                  cat("* Number of profiles: ", v.dim[1], "\n", sep="")
+                  cat("* Number of cells:    ", v.dim[2], "\n", sep="")
+                  cat("* Number of beams:    ", v.dim[3], "\n", sep="")
+                  cat("* Cell size:          ", object[["cellSize"]], "m\n", sep="")
               }
               if ("time" %in% names(object@data)) {
                   cat("* Summary of times between profiles:\n")
@@ -518,7 +520,6 @@ setMethod(f="summary",
               if ("ensembleNumber" %in% names(object@metadata)) {
                   cat(paste("* Ensemble Numbers:  ", vectorShow(object@metadata$ensembleNumber, msg="")))
               }
-              isAD2CP <- is.ad2cp(object)
               if (!isAD2CP) {
                   if ("numberOfCells" %in% metadataNames) {
                       dist <- object[["distance"]]
@@ -548,7 +549,11 @@ setMethod(f="summary",
                   }
                   beamUnspreaded <- object[["oceBeamUnspreaded"]]
                   cat("* Beams::\n")
-                  cat("    Number:          ", if (is.null(numberOfBeams)) "?" else numberOfBeams, "\n")
+                  if ("vv" %in% names(object@data))
+                      cat("    Number:          ", if (is.null(numberOfBeams)) "?" else numberOfBeams, "slanted, plus 1 central\n")
+                  else
+                      cat("    Number:          ", if (is.null(numberOfBeams)) "?" else numberOfBeams, "slanted\n")
+
                   cat("    Slantwise Angle: ", if (is.null(beamAngle)) "?" else beamAngle , "\n")
                   if (numberOfBeams > 0)
                       cat("    Orientation:     ", if (is.null(orientation)) "?" else orientation, "\n")
@@ -1057,23 +1062,39 @@ setMethod(f="subset",
                   }
               } else if (length(grep("distance", subsetString))) {
                   oceDebug(debug, "subsetting an adp by distance\n")
-                  if (length(grep("time", subsetString)))
-                      stop("cannot subset by both time and distance; split into multiple calls")
+                  if (grepl("time|pressure", subsetString))
+                      stop("cannot subset by both bin (e.g. distance) and profile (i.e. time or pressure)")
                   ## keep <- eval(substitute(subset), x@data, parent.frame(2))
                   keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
-                  oceDebug(debug, vectorShow(keep, "keeping bins:"), "\n")
+                  oceDebug(debug, "subset() will retain", sum(keep), "of", length(keep), "bins in slant beams\n")
+                  haveVerticalBeam <- "vv" %in% names(x@data) # assume, later, that va, vg, vq and vdistance exist
+                  if (haveVerticalBeam) {
+                      oceDebug(debug, "have a vertical beam\n")
+                      vkeep <- eval(expr=substitute(expr=subset,env=environment()),envir=list(distance=x@data$vdistance),enclos=parent.frame(2))
+                      oceDebug(debug, "subset() will retain", sum(vkeep), "of", length(vkeep), "bins in the vertical beam\n")
+                  }
                   if (sum(keep) < 2)
                       stop("must keep at least 2 bins")
                   res <- x
                   res@data$distance <- x@data$distance[keep] # FIXME: broken for AD2CP
+                  res@metadata$numberOfCells <- sum(keep)
+                  if (haveVerticalBeam)
+                      res@data$vdistance <- x@data$vdistance[vkeep]
                   for (name in names(x@data)) {
                       if (name == "time")
                           next
-                      if (is.array(x@data[[name]]) && 3 == length(dim(x@data[[name]]))) {
-                          oceDebug(debug, "subsetting array data[[", name, "]] by distance\n")
-                          oceDebug(debug, "before, dim(", name, ") =", dim(res@data[[name]]), "\n")
-                          res@data[[name]] <- x@data[[name]][, keep, , drop=FALSE]
-                          oceDebug(debug, "after, dim(", name, ") =", dim(res@data[[name]]), "\n")
+                      # Handle vertical beam.  These items are 2D fields, index1=profile index2=cell. We
+                      # use vkeep, based on vdistance, for the subset.
+                      if (haveVerticalBeam && (name %in% c("va", "vg", "vq", "vv"))) {
+                          oceDebug(debug, "subsetting vertical beam item \"", name, "\"\n", sep="")
+                          res@data[[name]] <- x@data[[name]][, vkeep, drop=FALSE]
+                      } else {
+                          if (is.array(x@data[[name]]) && 3 == length(dim(x@data[[name]]))) {
+                              oceDebug(debug, "subsetting array data[[", name, "]] by distance\n")
+                              oceDebug(debug, "before, dim(", name, ") =", dim(res@data[[name]]), "\n")
+                              res@data[[name]] <- x@data[[name]][, keep, , drop=FALSE]
+                              oceDebug(debug, "after, dim(", name, ") =", dim(res@data[[name]]), "\n")
+                          }
                       }
                   }
                   oceDebug(debug, "names of flags: ", paste(names(x@metadata$flags), collapse=" "), "\n")
@@ -1084,31 +1105,51 @@ setMethod(f="subset",
                                paste(vdim, collapse="x"), "; new dim=",
                                paste(dim(res@metadata$flags$v), collapse="x"), "\n")
                   }
-              } else if (length(grep("pressure", subsetString))) {
+              } else if (grepl("pressure", subsetString)) {
+                  # FIXME: should subset flags (https://github.com/dankelley/oce/issues/1837#issuecomment-862293585)
+                  if (grepl("distance", subsetString))
+                      stop("cannot subset by both profile (e.g. time or pressure) and bin (e.g. distance)")
                   ## keep <- eval(substitute(subset), x@data, parent.frame(2))
                   keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
+                  oceDebug(debug, "subset() will retain", sum(keep), "of", length(keep), "profiles\n")
+                  nkeep <- length(keep)
                   res <- x
-                  res@data$v <- res@data$v[keep, , ]
-                  res@data$a <- res@data$a[keep, , ]
-                  res@data$q <- res@data$q[keep, , ]
-                  res@data$time <- res@data$time[keep]
-                  if ("v" %in% names(x@metadata$flags)) {
-                      dim <- dim(x@metadata$flags$v)
-                      res@metadata$flags$v <- x@metadata$flags$v[keep, , drop=FALSE]
-                      oceDebug(debug, "subsetting flags$v original dim=",
-                               paste(dim, collapse="x"), "; new dim=",
-                               paste(dim(res@metadata$flags$v), collapse="x"))
+                  for (name in names(x@data)) {
+                      if (name == "time") {
+                          res@data$time <- x@data$time[keep]
+                          oceDebug(debug, "  handled time\n")
+                      } else if (name %in% c("va", "vg", "vq", "vv")) {
+                          if (is.matrix(x@data[[name]]) && dim(x@data[[name]])[1] == nkeep) {
+                              res@data[[name]] <- x@data[[name]][keep,]
+                              oceDebug(debug, "  handled vertical beam", name, "\n")
+                          } else {
+                              oceDebug(debug, "  skipped vertical beam", name, "(first dimension mismatch)\n")
+                          }
+                      } else if (is.vector(x@data[[name]])) {
+                          if (length(x@data[[name]]) == nkeep) {
+                              res@data[[name]] <- x@data[[name]][keep]
+                              oceDebug(debug, "  handled vector", name, "\n")
+                          } else {
+                              oceDebug(debug, "  skipped vector", name, "(length mismatch)\n")
+                          }
+                      } else if (is.matrix(x@data[[name]])) {
+                          if (dim(x@data[[name]])[1] == nkeep) {
+                              res@data[[name]] <- x@data[[name]][keep,]
+                              oceDebug(debug, "  handled matrix", name, "\n")
+                          } else {
+                              oceDebug(debug, "  skipped matrix", name, "(first dimension mismatch)\n")
+                          }
+                      } else if (is.array(x@data[[name]])) {
+                          if (dim(x@data[[name]])[1] == nkeep) {
+                              res@data[[name]] <- x@data[[name]][keep,,]
+                              oceDebug(debug, "  handled array", name, "\n")
+                          } else {
+                              oceDebug(debug, "  skipped array", name, "(first dimension mismatch)\n")
+                          }
+                      } else if (!is.null(x@data[[name]])) {
+                          warning("In subset() : Skipping data@", name, " because it is not a vector, matrix, or array\n", sep="", call.=FALSE)
+                      }
                   }
-                  ## the items below may not be in the dataset
-                  names <- names(res@data)
-                  if ("bottomRange" %in% names) res@data$bottomRange <- res@data$bottomRange[keep, ]
-                  if ("pressure" %in% names) res@data$pressure <- res@data$pressure[keep]
-                  if ("temperature" %in% names) res@data$temperature <- res@data$temperature[keep]
-                  if ("salinity" %in% names) res@data$salinity <- res@data$salinity[keep]
-                  if ("depth" %in% names) res@data$depth <- res@data$depth[keep]
-                  if ("heading" %in% names) res@data$heading <- res@data$heading[keep]
-                  if ("pitch" %in% names) res@data$pitch <- res@data$pitch[keep]
-                  if ("roll" %in% names) res@data$roll <- res@data$roll[keep]
               } else if (length(grep("average", subsetString))) {
                   res@data$burst <- NULL
                   res@data$interleavedBurst <- NULL
@@ -1119,7 +1160,7 @@ setMethod(f="subset",
                   res@data$average <- NULL
                   res@data$burst <- NULL
               } else {
-                  stop('subset should be "distance", "time", "average", "burst", or "interleavedBurst"; "',
+                  stop('subset should be by "distance", "time", "average", "burst", or "interleavedBurst"; "',
                        subsetString, '" is not permitted')
               }
               res@metadata$numberOfSamples <- dim(res@data$v)[1] # FIXME: handle AD2CP
@@ -3788,6 +3829,13 @@ display.bytes <- function(b, label="", ...)
 #'
 #' @param x an [adp-class] object that contains bottom-tracking velocities.
 #'
+#' @param despike either a logical value or a univariate function. This
+#' controls whether the bottom velocity (`bv`) values should be altered before they are
+#' subtracted from the beam velocities. If it is `TRUE` then the `bv` values are despiked
+#' first by calling [despike()]. If it is a function, then that function is used instead of
+#' [despike()], e.g. `function(x) despike(x, reference="smooth")` would change the reference
+#' function for despiking from its default of `"median"`.
+#'
 #' @template debugTemplate
 #'
 #' @author Dan Kelley and Clark Richards
@@ -3797,7 +3845,7 @@ display.bytes <- function(b, label="", ...)
 #' object class.
 #'
 #' @family things related to adp data
-subtractBottomVelocity <- function(x, debug=getOption("oceDebug"))
+subtractBottomVelocity <- function(x, despike=FALSE, debug=getOption("oceDebug"))
 {
     oceDebug(debug, "subtractBottomVelocity(x) {\n", unindent=1)
     if (!("bv" %in% names(x@data))) {
@@ -3808,7 +3856,17 @@ subtractBottomVelocity <- function(x, debug=getOption("oceDebug"))
     numberOfBeams <- dim(x[["v"]])[3] # could also get from metadata but this is less brittle
     for (beam in 1:numberOfBeams) {
         oceDebug(debug, "beam #", beam, "\n")
-        res@data$v[, , beam] <- x[["v"]][, , beam] - x@data$bv[, beam]
+        if (is.logical(despike)) {
+            if (despike == FALSE) {
+                res@data$v[, , beam] <- x[["v"]][, , beam] - x@data$bv[, beam]
+            } else {
+                res@data$v[, , beam] <- x[["v"]][, , beam] - despike(x@data$bv[, beam])
+            }
+        } else if (is.function(despike)) {
+            res@data$v[, , beam] <- x[["v"]][, , beam] - despike(x@data$bv[, beam])
+        } else {
+            stop("despike must be a logical value or a function")
+        }
     }
     oceDebug(debug, "} # subtractBottomVelocity()\n", unindent=1)
     res@processingLog <- processingLogAppend(res@processingLog, paste(deparse(expr=match.call()), sep="", collapse=""))
