@@ -159,8 +159,13 @@ setMethod(f="[[",
                   temperature <- x[["temperature", debug=debug-1]]
                   dim <- dim(salinity)
                   ## Do not need longitude and latitude if eos="unesco", but retain for code clarity
-                  longitude <- rep(x@data$longitude, each=dim[1])
-                  latitude <- rep(x@data$latitude, each=dim[1])
+                  if (is.null(dim)) {
+                      longitude <- rep(x[["longitude"]], length(salinity))
+                      latitude <- rep(x[["latitude"]], length(salinity))
+                  } else {
+                      longitude <- rep(x@data$longitude, each=dim[1])
+                      latitude <- rep(x@data$latitude, each=dim[1])
+                  }
                   if (i == "CT") {
                       res <- gsw_CT_from_t(x[["SA"]], temperature, pressure)
                   } else if (i == "N2") {

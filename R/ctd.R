@@ -4449,12 +4449,19 @@ plotTS <- function (x,
             longitude <- x[["longitude"]]
             latitude <- x[["latitude"]]
             if (length(longitude) < length(SP)) {
-                ## Copy across depths. This is inside a conditional because
-                ## possibly argo[["longitude"]] should mimic section[["longitude"]],
-                ## in doing the lengthing by itself unless the second argument is
-                ## "byStation" (issue 1273 ... under consideration 2017jul12)
-                longitude <- rep(x[["longitude"]], each=dim[1])
-                latitude <- rep(x[["latitude"]], each=dim[1])
+                if (is.null(dim)) {
+                    # case 1: salinity, etc, are vectors
+                    longitude <- rep(x[["longitude"]], length(SP))
+                    latitude <- rep(x[["latitude"]], length(SP))
+                } else {
+                    # case 2: salinity, etc, are arrays
+                    # Copy across depths. This is inside a conditional because
+                    # possibly argo[["longitude"]] should mimic section[["longitude"]],
+                    # in doing the lengthing by itself unless the second argument is
+                    # "byStation" (issue 1273 ... under consideration 2017jul12)
+                    longitude <- rep(x@data$longitude, each=dim[1])
+                    latitude <- rep(x@data$latitude, each=dim[1])
+                }
             }
             x <- as.ctd(SP, t, p, longitude=longitude, latitude=latitude)
         } else if (is.list(x)) {
