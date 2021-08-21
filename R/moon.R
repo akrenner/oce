@@ -1,34 +1,3 @@
-#' Julian-Day number to Julian century
-#'
-#' Convert a Julian-Day number to a time in julian centuries since noon on
-#' January 1, 1900.
-#' The method follows reference 1 equation 15.1.  The example reproduces the
-#' example provided by reference 1 example 15.a, with fractional error 3e-8.
-#'
-#' @param jd a julian day number, e.g. as given by [julianDay()].
-#'
-#' @return Julian century since noon on January 1, 1900.
-#'
-#' @author Dan Kelley
-#'
-#' @references
-#' 1. Meeus, Jean, 1982.  Astronomical formulae for Calculators.
-#' Willmann-Bell. Richmond VA, USA. 201 pages
-#'
-#' @examples
-#'
-#' t <- ISOdatetime(1978, 11, 13, 4, 35, 0, tz="UTC")
-#' jca <- julianCenturyAnomaly(julianDay(t))
-#' cat(format(t), "is Julian Century anomaly", format(jca, digits=8), "\n")
-#'
-#' @family things related to astronomy
-#' @family things related to time
-julianCenturyAnomaly <- function(jd)
-{
-    (jd - 2415020.0) / 36525         # reference 1 Meeus 1982 (eq 7.1 or 15.1)
-}
-
-
 #' Lunar Angle as Function of Space and Time
 #'
 #' The calculations are based on formulae provided by Meeus (1982), primarily
@@ -94,11 +63,12 @@ julianCenturyAnomaly <- function(jd)
 #'
 #' @seealso The equivalent function for the sun is [sunAngle()].
 #'
-#' @references Meeus, Jean, 1982.  Astronomical formulae for calculators.
-#' Willmann-Bell. Richmond VA, USA. 201 pages.
+#' @references
+#' * Meeus, Jean. Astronomical Formulas for Calculators. Second Edition.
+#' Richmond, Virginia, USA: Willmann-Bell, 1982.
 #'
-#' Meeus, Jean, 1991. Astronomical algorithms.  Willmann-Bell, Richmond VA,
-#' USA. 429 pages.
+#' * Meeus, Jean. Astronomical Algorithms. Second Edition.
+#' Richmond, Virginia, USA: Willmann-Bell, 1991.
 #'
 #' @examples
 #'
@@ -147,7 +117,7 @@ moonAngle <- function(t, longitude=0, latitude=0, useRefraction=TRUE)
     if (is.null(tzone) || "UTC" != tzone)
         attributes(t)$tzone <- "UTC"
     RPD <- atan2(1, 1) / 45            # radians per degree
-    ## In this cde, the symbol names follow Meeus (1982) chapter 30, with e.g. "p"
+    ## In this code, the symbol names follow Meeus (1982) chapter 30, with e.g. "p"
     ## used to indicate primes, e.g. Lp stands for L' in Meeus' notation.
     ## Also, T2 and T3 are powers on T.
     T <- julianCenturyAnomaly(julianDay(t))

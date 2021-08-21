@@ -13,18 +13,17 @@ This is sample lobo dataset obtained in the Northwest Arm of Halifax by
 Satlantic.
 }
 \examples{
-\donttest{
 library(oce)
 data(lobo)
 summary(lobo)
 plot(lobo)
-}
 
 }
 \seealso{
 Other datasets provided with oce: 
 \code{\link{adp}},
 \code{\link{adv}},
+\code{\link{amsr}},
 \code{\link{argo}},
 \code{\link{cm}},
 \code{\link{coastlineWorld}},

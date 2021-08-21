@@ -36,9 +36,10 @@ if that fails, then a general function is used
 
 
 There are several possibilities, depending on the nature of \code{i}.
-Note that all of these calculations are done with
-\code{salinityAdjusted}, if that is present, or with \code{salinity}
-otherwise, and similar for temperature and pressure.
+Note that \linkS4class{argo} data may contain both unadjusted data and adjusted
+data.  By default, this extraction function refers to the former, but a
+preference for the latter may be set with \code{\link[=preferAdjusted]{preferAdjusted()}}, the
+documentation of which explains (fairly complex) details.
 \itemize{
 \item If \code{i} is \code{"profile"} and \code{j} is an integer vector,
 then an argo object is returned, as specified by \code{j}. For example,
@@ -60,6 +61,11 @@ potential density anomaly (referenced to zero
 pressure) is computed, with \code{\link[=swSigmaTheta]{swSigmaTheta()}}, where the
 equation of state is taken to be
 \code{\link{getOption}}\verb{("oceEOS",default="gsw")}.
+\item If \code{i} is \code{"sigma0"}, \code{"sigma1"}, \code{"sigma2"}, \code{"sigma3"} or \code{"sigma4"},
+then the associated function in the \CRANpkg{gsw} package.
+For example, \code{"sigma0"} uses \code{\link[gsw:gsw_sigma0]{gsw::gsw_sigma0()}}, which returns
+potential density anomaly referenced to 0 dbar,
+according to the gsw equation of state.
 \item If \code{i} is \code{"theta"}, then
 potential temperature (referenced to zero
 pressure) is computed, with \code{\link[=swTheta]{swTheta()}}, where the
@@ -67,6 +73,8 @@ equation of state is taken to be
 \code{\link{getOption}}\verb{("oceEOS",default="gsw")}.
 \item If \code{i} is \code{"depth"}, then
 a matrix of depths is returned.
+\item If \code{i} is \code{"id"} or \code{"ID"}, then the \code{id} element within
+the \code{metadata} slot is returned.
 \item If \code{i} is in the \code{data} slot of \code{x},
 then it is returned, otherwise if it is in the \code{metadata} slot,
 then that is returned, otherwise \code{NULL} is returned.

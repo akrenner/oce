@@ -40,9 +40,10 @@ plot(as.ctd(d$salinity, d$temperature, d$pressure))
 
 }
 \references{
+The following links used to work, but failed as of December 2020.
 \enumerate{
-\item https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/exchange_format_desc.htm
-\item https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/example_ct1.csv
+\item \verb{https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/exchange_format_desc.htm}
+\item \verb{https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/example_ct1.csv}
 }
 }
 \seealso{
@@ -75,6 +76,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

@@ -67,8 +67,10 @@ section 2 on page 6). Note that \code{\link[=oceSetMetadata]{oceSetMetadata()}}
 can be used to alter the slantwise beam angle of an existing object,
 and this will alter any later conversion from beam to xyz coordinates.}
 
-\item{monitor}{Logical value indicating whether the progress in reading
-the file is to be illustrated by calling \code{\link[=txtProgressBar]{txtProgressBar()}}.}
+\item{monitor}{boolean value indicating whether to indicate the progress
+of reading the file, by using \code{\link[=txtProgressBar]{txtProgressBar()}} or otherwise.  The value
+of \code{monitor} is changed to \code{FALSE} automatically, for non-interactive
+sessions.}
 
 \item{despike}{Ignored by this function, and provided only for similarity
 to other adp-reading functions.}
@@ -77,8 +79,10 @@ to other adp-reading functions.}
 within the \code{processingLog} slot of th returned value.}
 
 \item{debug}{Integer value indicating the level of debugging.
-Set to 1 to get a moderate  amount of debugging information,
-or to 2 to get more.}
+Set to 1 to get a moderate amount of debugging information, from
+the R code only, to 2 to get some debugging information from the C++
+code that is used to parse the data chunks, or to 3 for intensive
+debugging at both levels.}
 
 \item{\dots}{Ignored by this function.}
 }

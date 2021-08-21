@@ -36,8 +36,6 @@
   lonlabels = TRUE,
   latlabels = TRUE,
   projection = NULL,
-  parameters = NULL,
-  orientation = NULL,
   latlon.pch = 20,
   latlon.cex = 1.5,
   latlon.col = "red",
@@ -207,12 +205,6 @@ used, depending on whether the CTD station is within 70 degrees of the equator
 or at higher latitudes.  Finally, if this is a string in the format used by
 \code{\link[=mapPlot]{mapPlot()}}, then it is is passed to that function.}
 
-\item{parameters}{a \strong{deprecated} argument that has been ignored
-since February 2016; see \link{oce-deprecated}.}
-
-\item{orientation}{a \strong{deprecated} argument that has been ignored
-since February 2016; see \link{oce-deprecated}.}
-
 \item{latlon.pch}{Symbol code for sample location (ignored if no map plotted).}
 
 \item{latlon.cex}{Symbol expansion factor for sample location (ignored if no
@@ -234,8 +226,12 @@ plotted).}
 frequency; in that case, it is passed to \code{\link[=swN2]{swN2()}} as the argument
 named \code{df}.}
 
-\item{keepNA}{Flag indicating whether to keep \code{NA} values in linegraphs,
-which will yield breaks in the lines.}
+\item{keepNA}{logical value indicating whether \code{NA} values
+will yield breaks in lines drawn if \code{type} is \code{b}, \code{l}, or \code{o}.
+The default value is \code{FALSE}.  Setting \code{keepNA} to \code{TRUE}
+strung together into one \linkS4class{ctd} object, which otherwise
+would have extraneous lines joining the deepest point in one
+profile to the shallowest in the next profile.}
 
 \item{type}{The type of plot to draw, using the same scheme as
 \code{\link[=plot]{plot()}}. If supplied, this is increased to be the
@@ -336,6 +332,7 @@ The documentation for \linkS4class{ctd} explains the structure of CTD
 objects, and also outlines the other functions dealing with them.
 
 Other functions that plot oce data: 
+\code{\link{download.amsr}()},
 \code{\link{plot,adp-method}},
 \code{\link{plot,adv-method}},
 \code{\link{plot,amsr-method}},
@@ -388,6 +385,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

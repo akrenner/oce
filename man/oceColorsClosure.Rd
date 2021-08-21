@@ -34,6 +34,7 @@ imagep(m, col=oceColorsOxygenUpdated, zlab="oxygenUpdated")
 }
 \seealso{
 Other things related to colors: 
+\code{\link{colormapGMT}()},
 \code{\link{colormap}()},
 \code{\link{oceColors9B}()},
 \code{\link{oceColorsCDOM}()},
@@ -49,6 +50,7 @@ Other things related to colors:
 \code{\link{oceColorsSalinity}()},
 \code{\link{oceColorsTemperature}()},
 \code{\link{oceColorsTurbidity}()},
+\code{\link{oceColorsTurbo}()},
 \code{\link{oceColorsTwo}()},
 \code{\link{oceColorsVelocity}()},
 \code{\link{oceColorsViridis}()},

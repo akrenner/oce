@@ -37,6 +37,7 @@
   showStart = TRUE,
   stationTicks = TRUE,
   showBottom = TRUE,
+  showSpine = TRUE,
   drawPalette = TRUE,
   axes = TRUE,
   mgp,
@@ -81,8 +82,9 @@ by \code{at}.}
 that an index is \emph{not} a station number, e.g. to show the first 4
 stations, use \code{station.indices=1:4}.}
 
-\item{coastline}{String giving the coastline to be used in a station map
-The permitted choices are \code{"best"} (the default) to pick
+\item{coastline}{Either a \linkS4class{coastline} object to be used,
+or a string.  In the second case, the permitted
+choices are \code{"best"} (the default) to pick
 a variant that suits the scale, \code{"coastlineWorld"} for the coarse
 version that is provided by \CRANpkg{oce},
 \code{"coastlineWorldMedium"} or \code{"coastlineWorldFine"} for two
@@ -109,9 +111,10 @@ the mean latitude exceeds 70N and \code{mollweide} otherwise.}
 
 \item{xtype}{Type of x axis, for contour plots, either \code{"distance"} for
 distance (in km) to the first point in the section, \code{"track"} for distance
-along the cruise track, \code{"longitude"}, \code{"latitude"}, or
-\code{"time"}.  Note that if the x values are not in order, they will be put in
-order (which may make no sense) and a warning will be printed.}
+along the cruise track, \code{"longitude"}, \code{"latitude"},
+\code{"time"} or \code{"spine"} (distance along a spine that was added
+with \code{\link[=addSpine]{addSpine()}}).  Note that if the x values are not in order, they will be put in
+order, and since that might not make physical sense, a warning will be issued.}
 
 \item{ytype}{Type of y axis for contour plots, either \code{"pressure"} for
 pressure (in dbar, with zero at the surface) or \code{"depth"} for depth (in m
@@ -147,18 +150,19 @@ locations with ticks at the top margin of cross-section plots. Setting this
 parameter to \code{FALSE} frees the user up to do their own labelling
 at this spot.}
 
-\item{showBottom}{An indication of whether (and how) to indicate the ocean bottom.
-If \code{FALSE}, then the bottom is not rendered. If \code{TRUE}, then it
-is rendered with a gray polygon. If \code{showBottom} is a character string,
-then there are three possibilities: is the string is \code{"polygon"} then
-a polygon is drawn, if it is \code{"lines"} then a line is drawn, and if it
-is \code{"points"} then points are drawn. If \code{showBottom} is
-a \linkS4class{topo} object,
-then the station locations are
+\item{showBottom}{a value indicating whether (and how) to indicate the
+ocean bottom on cross-section views.  There are three possibilities.
+(a) If \code{showBottom} is \code{FALSE}, then the bottom is not rendered.  If it
+is \code{TRUE}, then the  bottom is rendered with a gray polygon.
+(b) If \code{showBottom} is the character value \code{"polygon"}, then a polygon is drawn,
+and similarly lines are drawn for \code{"lines"}, and points for \code{"points"}.
+(c) If \code{showBottom} is a \linkS4class{topo} object, then the station locations are
 interpolated to that topography and the results are shown with a polygon.
-In this last case, the interpolation is set at a grid that is roughly
-in accordance with the resolution of the latitudes in the \code{topo} object.
 See \dQuote{Examples}.}
+
+\item{showSpine}{logical value used if \code{which="map"}.  If \code{showSpine} is
+\code{TRUE} and \code{section} has had a spine added with \code{\link[=addSpine]{addSpine()}}, then
+the spine is drawn in blue.}
 
 \item{drawPalette}{Logical value indicating whether to draw a palette when \code{ztype="image"}
 ignored otherwise.}
@@ -172,7 +176,8 @@ ignored otherwise.}
 \item{mar}{Value to be used with \code{\link{par}}\code{("mar")}. If not provided,
 a default is set up.}
 
-\item{col}{Color, which defaults to \code{\link{par}}\code{("col")}.}
+\item{col}{Color, which defaults to \code{\link{par}}\code{("col")} for line types, but
+to \link{oceColorsViridis} for image types.}
 
 \item{cex}{Numerical character-expansion factor, which defaults to \code{\link{par}}\code{("cex")}.}
 
@@ -255,7 +260,7 @@ par(mfrow=c(1, 1))
 \dontrun{
 plot(GSg, which=1, ztype='image')
 T <- GS[['temperature']]
-col <- oceColorsJet(100)[rescale(T, rlow=1, rhigh=100)]
+col <- oceColorsViridis(100)[rescale(T, rlow=1, rhigh=100)]
 points(GS[['distance']],GS[['depth']],pch=20,cex=3,col='white')
 points(GS[['distance']],GS[['depth']],pch=20,cex=2.5,col=col)
 }
@@ -287,6 +292,7 @@ structure of section objects, and also outlines the other functions dealing
 with them.
 
 Other functions that plot oce data: 
+\code{\link{download.amsr}()},
 \code{\link{plot,adp-method}},
 \code{\link{plot,adv-method}},
 \code{\link{plot,amsr-method}},

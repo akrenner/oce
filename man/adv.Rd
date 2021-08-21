@@ -26,15 +26,16 @@ plot(adv)
 
 # Spectrum of upward component of velocity, with ``turbulent'' reference line
 s <- spectrum(adv[["v"]][,3],plot=FALSE)
-plot(log10(s$freq), log10(s$spec), type='l')
+plot(log10(s$freq), log10(s$spec), type="l")
 for (a in seq(-20, 20, by=1))
-    abline(a=a, b=-5/3, col='gray', lty='dotted')
+    abline(a=a, b=-5/3, col="gray", lty="dotted")
 }
 
 }
 \seealso{
 Other datasets provided with oce: 
 \code{\link{adp}},
+\code{\link{amsr}},
 \code{\link{argo}},
 \code{\link{cm}},
 \code{\link{coastlineWorld}},

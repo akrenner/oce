@@ -2,7 +2,7 @@
 % Please edit documentation in R/ctd.R
 \name{summary,ctd-method}
 \alias{summary,ctd-method}
-\title{Summarize a CTD Object}
+\title{Summarize a ctd Object}
 \usage{
 \S4method{summary}{ctd}(object, ...)
 }
@@ -51,6 +51,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

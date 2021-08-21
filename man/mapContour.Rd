@@ -20,11 +20,11 @@ mapContour(
 )
 }
 \arguments{
-\item{longitude}{vector of longitudes of points to be plotted, or an object of
+\item{longitude}{numeric vector of longitudes of points to be plotted, or an object of
 class \code{topo} (see \linkS4class{topo}), in which case
 \code{longitude}, \code{latitude} and \code{z} are inferred from that object.}
 
-\item{latitude}{vector of latitudes of points to be plotted.}
+\item{latitude}{numeric vector of latitudes of points to be plotted.}
 
 \item{z}{matrix to be contoured. The number of rows and columns in \code{z}
 must equal the lengths of \code{longitude} and \code{latitude}, respectively.}
@@ -52,7 +52,7 @@ this equals \code{"erase"} (which is the default), then the contour line
 is drawn  first, then the area under the label is erased (filled with
 white 'ink'), and then the label is drawn. This can be useful
 in drawing coarsely-spaced labelled contours on top of finely-spaced
-unlabelled contours. On the othr hand, if \code{underlay} equals
+unlabelled contours. On the other hand, if \code{underlay} equals
 \code{"interrupt"}, then the contour line is interrupted in the
 region of the label, which is closer to the scheme used by the
 base \code{\link[=contour]{contour()}} function.}
@@ -87,7 +87,7 @@ Note that label placement in \code{mapContour} is handled differently
 than in \code{\link[=contour]{contour()}}.
 }
 \examples{
-\donttest{
+\dontrun{
 library(oce)
 data(coastlineWorld)
 if (requireNamespace("ocedata", quietly=TRUE)) {

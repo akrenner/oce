@@ -7,12 +7,12 @@
 read.argo(file, debug = getOption("oceDebug"), processingLog, ...)
 }
 \arguments{
-\item{file}{a character string giving the name of the file to load.}
+\item{file}{A character string giving the name of the file to load.}
 
-\item{debug}{a flag that turns on debugging.  Set to 1 to get a moderate amount
+\item{debug}{A flag that turns on debugging.  Set to 1 to get a moderate amount
 of debugging information, or to 2 to get more.}
 
-\item{processingLog}{if provided, the action item to be stored in the log.
+\item{processingLog}{If provided, the action item to be stored in the log.
 (Typically only provided for internal calls; the default that it provides is
 better for normal calls by a user.)}
 
@@ -22,69 +22,88 @@ better for normal calls by a user.)}
 An \linkS4class{argo} object.
 }
 \description{
-\code{read.argo} is used to read an Argo file, producing an object of type
-\code{argo}. The file must be in the ARGO-style NetCDF format described at
+\code{read.argo} is used to read an Argo file, producing an \linkS4class{argo} object.
+The file must be in the ARGO-style NetCDF format described
 in the Argo documentation (see references 2 and 3).
 }
 \details{
-Items are inferred from the data file in a straightforward way, using
-\code{\link[ncdf4:ncvar_get]{ncdf4::ncvar_get()}}, converting from one-column matrices
-to vectors, and trimming leading and trailing blank space in character
-values, using \code{\link[=trimString]{trimString()}}.
-
-Items are renamed from the argo ('snake case') forms to oce ('camel
-case') forms with \code{\link[=argoNames2oceNames]{argoNames2oceNames()}}. For example,
-\code{FIRMWARE_VERSION} in the data file is renamed as
-\code{firmwareVersion} in the return value.
-Note that some files use upper-case for items, while other files
-use lower-case for the same things; \code{read.argo} attempts
-to ignore this variation.
-
 See the Argo documentation (see references 2 and 3) for some details on what files contain.
 Many items listed in section 2.2.3 of reference 3 are read from the
 file and stored in the \code{metadata} slot, with the exception of
 \code{longitude} and \code{latitude}, which are stored in the
 \code{data} slot, alongside hydrographic information.
 
-The following global attributes stored within the netcdf file are stored in the
-\code{metadata} slot: \code{title}, \code{institution}, \code{source},
-\code{history}, \code{references}, \code{userManualVersion}, \code{conventions},
-and \code{featureType}. These names are identical to those in the netcdf
-file, except that \code{userManualVersion} is named
-\code{user_manual_version} in the file, and \code{conventions} is
-named \code{Conventions} in the file.
+The names of several data parameters stored within the netCDF file
+are altered to fit the oce context. For example, \code{PRES} becomes \code{pressure},
+matching the name of this variable in other oce data types.
+The original names are reported by \verb{summary,argo-method}, and
+data may be extracted with \verb{[[,argo-method} using those names, so
+the renaming should not be too inconvenient to Argo experts who
+are new to oce.
 
-It is assumed that the profile data are as listed in the NetCDF variable
-called \code{STATION_PARAMETERS}. Each item can have variants, as
+Several of the netCDF global attributes are also renamed before
+placement in the \code{metadata} slot of the return value.  These include
+\code{conventions}, \code{featureType}, \code{history}, \code{institution},
+\code{nParameters}, \code{nProfiles},  \code{references}, \code{source}, \code{title},
+and \code{userManualVersion}.
+These names are derived from those in the netcdf
+file, and mainly follow the pattern explained in the
+\dQuote{Variable renaming convention} section.
+
+For profile data (as indicated by the NetCDF global attribute
+named \code{"featureType"} being equal to \code{"trajectoryProfile"}),
+the NetCDF item named \code{"STATION_PARAMETERS"} controls
+whether variables in the source file will be stored in the
+\code{metadata} or \code{data} slot of the returned object.
+If \code{STATION_PARAMETERS} is not present, as is the case for
+trajectory files (which are detected by \code{featureType} being
+\code{"trajectory"}), some guesses are made as to what goes in
+\code{data} and \code{metadata} slots.
+
+Each data item can have variants, as
 described in Sections 2.3.4 of reference 3.
 For example, if \code{"PRES"} is found in \code{STATION_PARAMETERS},
 then \code{PRES} (pressure) data are sought in the file, along with
 \code{PRES_QC}, \code{PRES_ADJUSTED}, \code{PRES_ADJUSTED_QC}, and
 \code{PRES_ERROR}. The same pattern works for other profile data. The variables
-are stored with different names within the resultant \linkS4class{argo}
-object, to match with \code{oce} conventions. Thus, \code{PRES} gets renamed
-\code{pressure}, while \code{PRES_ADJUSTED} gets renamed \code{pressureAdjusted},
-and \code{PRES_ERROR} gets renamed \code{pressureError}; all of these are
-stored in the \code{data} slot. Meanwhile, the quality-control flags
-\code{PRES_QC} and \code{PRES_ADJUSTED_QC} are stored as \code{pressure}
-and \code{pressureAdjusted} in the \code{metadata$flags} slot.
-
-Once a predefined series of items are inferred and stored in either the
-\code{metadata} or \code{data} slot, \code{read.argo} then reads all
-non-empty variables in the file, storing them in the \code{metadata}
-slot, using with the original ('snake case') name that is used in
-the data file. (Note that the sample dataset accessed with \code{data(argo)}
-lacks metadata items with names starting with \code{HISTORY_}, because
-those are zero-length in the source file.)
+are stored with names created as explained in the
+\dQuote{Variable renaming convention} section below. Note that
+flags, which are stored variables ending in \code{"_QC"} in the netcdf
+file, are stored in the \code{flags} item within the \code{metadata} slot
+of the returned object; thus, for example,
+\code{PRES_QC} is stored as \code{pressure} in \code{flags}.
 }
+\section{Variable renaming convention}{
+
+Argo netcdf files employ a \code{"SNAKE_CASE"} naming scheme (sometimes
+using lower case) that is inconsistent with the \code{"camelCase"} scheme
+used in oce. Since argo objects are just a small part of oce, a decision
+was made to rename argo items. For example, \code{"CYCLE_NUMBER"} in the netcdf file
+becomes \code{"cycleNumber"} in the oce object returned by \code{read.argo}.
+The conversion for objects in the \code{data} slot often also involves
+expanding on argo abbreviations, e.g. \code{"PSAL"} becomes \code{"salinity"}.
+The renaming work is carried out with \code{\link[=argoNames2oceNames]{argoNames2oceNames()}} for
+handles both name expansion for several dozen special cases,
+and with \code{\link[=snakeToCamel]{snakeToCamel()}} with the \code{specialCase} argument
+set to \code{"QC"}. While this results in variable names that should make
+sense in the general oce context (where, for example, salinity is expected
+to be stored in a variable named \code{"salinity"}), it may be confusing
+to argo experts who are just starting to use oce.  Such people might
+find it helpful to use e.g. \code{sort(names(x[["metadata"]]))} to get a list
+of all items in the \code{metadata} slot (or similar with \code{"data"}), since working
+in reverse may be easier than simply guessing at what names oce has chosen.
+(Note that prior to 2020 June 24, some metadata items were stored in
+\code{"SNAKE_CASE"}.)
+}
+
 \section{Data sources}{
 
 Argo data are made available at several websites. A bit of detective
 work can be required to track down the data.
 
-Some servers provide  data for floats that surfaced in a given ocean
+Some servers provide data for floats that surfaced in a given ocean
 on a given day, the anonymous FTP server
-\code{ftp://usgodae.org/pub/outgoing/argo/geo/} being an example.
+\code{usgodae.org/pub/outgoing/argo/geo/} being an example.
 
 Other servers provide data on a per-float basis. A complicating
 factor is that these data tend to be categorized by "dac" (data
@@ -93,7 +112,7 @@ float. For example,
 \code{https://www.usgodae.org/ftp/outgoing/argo/} is the top level of
 a such a repository. If the ID of a float is known but not the
 "dac", then a first step is to download the text file
-\code{http://www.usgodae.org/ftp/outgoing/argo/ar_index_global_meta.txt}
+\code{https://www.usgodae.org/ftp/outgoing/argo/ar_index_global_meta.txt}
 and search for the ID. The first few lines of that file are header,
 and after that the format is simple, with columns separated by slash
 (\code{/}). The dac is in the first such column and the float ID in the
@@ -147,9 +166,9 @@ summary(argo)
 }
 \references{
 \enumerate{
-\item \url{http://www.argo.ucsd.edu/}
-\item Argo User's Manual Version 3.3, Nov 89th, 2019, available at
-\url{https://archimer.ifremer.fr/doc/00187/29825/}
+\item \url{https://argo.ucsd.edu}
+\item Argo User's Manual Version 3.2, Dec 29th, 2015, available at
+\url{https://archimer.ifremer.fr/doc/00187/29825/} online.
 \item User's Manual (ar-um-02-01) 13 July 2010, available at
 \url{http://www.argodatamgt.org/content/download/4729/34634/file/argo-dm-user-manual-version-2.3.pdf},
 which is the main document describing argo data.

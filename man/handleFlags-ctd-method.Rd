@@ -2,7 +2,7 @@
 % Please edit documentation in R/ctd.R
 \name{handleFlags,ctd-method}
 \alias{handleFlags,ctd-method}
-\title{Handle Flags in CTD Objects}
+\title{Handle Flags in ctd Objects}
 \usage{
 \S4method{handleFlags}{ctd}(
   object,
@@ -69,12 +69,17 @@ manipulate the contents of the \code{data} slot, based on
 such data-quality flags. For example, a common operation is to replace
 erroneous data with \code{NA}.
 
-If \code{metadata$flags} in the first argument
-is empty, then that object is returned, unaltered.
-Otherwise, \code{handleFlags} analyses the data-quality flags within
-the object, in context of the \code{flags} argument, and then interprets
-the \code{action} argument to select an action that is to be applied
-to the matched data.
+If the \code{flags} within \code{object}'s \code{metadata} slot is empty,
+then \code{object} is returned, unaltered.
+Otherwise, \code{handleFlags} examines \code{object@metadata$flags}
+in the context of the \code{flags} argument, and then
+carries out actions that are specified by the \code{actions} argument.
+By default, this sets the returned \code{data} entries to \code{NA},
+wherever the corresponding \code{metadata$flag} values
+signal unreliable data. To maintain a hint as to why
+\code{data} were changed, \code{metadata$flags} in the
+returned value is a direct copy of the corresponding
+entry in \code{object}.
 }
 \examples{
 library(oce)
@@ -114,18 +119,19 @@ flag <- ifelse(deep, 7, 2)
 for (flagName in names(A[["flags"]]))
     A[[paste(flagName, "Flag", sep="")]] <- flag
 Af <- handleFlags(A)
-expect_equal(is.na(Af[["salinity"]]), deep)
+stopifnot(all.equal(is.na(Af[["salinity"]]), deep))
 
 # 5. Single-variable flags (list specification)
 B <- section[["station", 100]]
 B[["flags"]] <- list(flag)
 Bf <- handleFlags(B)
-expect_equal(is.na(Bf[["salinity"]]), deep)
+stopifnot(all.equal(is.na(Bf[["salinity"]]), deep))
 
 }
 \references{
+The following link used to work, but failed as of December 2020.
 \enumerate{
-\item \url{https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/exchange_format_desc.htm}
+\item \verb{https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/exchange_format_desc.htm}
 }
 }
 \seealso{
@@ -175,6 +181,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

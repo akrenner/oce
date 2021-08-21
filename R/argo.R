@@ -1,5 +1,4 @@
-# vim:textwidth=128:expandtab:shiftwidth=4:softtabstop=4
-
+# vim:textwidth=128:expandtab:shiftwidth=4:softtabstop=4:foldmethod=marker
 #' Class to Store Argo Data
 #'
 #' This class stores data from Argo floats.
@@ -10,9 +9,6 @@
 #' [subset,argo-method()].  Plots can be made with
 #' [plot,argo-method()], while [summary,argo-method()]
 #' produces statistical summaries and `show` produces overviews.
-#'
-#' See \url{http://www.argo.ucsd.edu/Gridded_fields.html} for some
-#' argo-related datasets that may be useful in a wider context.
 #'
 #' @templateVar class argo
 #'
@@ -36,34 +32,26 @@ setClass("argo", contains="oce")
 #'
 #' This holds data from ARGO 6900388 in the North Atlantic.
 #'
-#' To quote Argo's website: "These data were collected and made freely
-#' available by the International Argo Program and the national programs
-#' that contribute to it.  (http//www.argo.ucsd.edu,
-#' http://argo.jcommops.org).  The Argo Program is part of the
-#' Global Ocean Observing System."
-#'
 #' Below is the official citation (note that this DOI has web links for
 #' downloads):
 #' Argo (2017). Argo float data and metadata from Global Data Assembly Centre
 #' (Argo GDAC) - Snapshot of Argo GDAC of July, 8st 2017. SEANOE.
-#' \url{http://doi.org/10.17882/42182#50865}
+#' \doi{10.17882/42182#50865}
 #'
 #' @name argo
 #' @docType data
 #'
 #' @examples
-#'\donttest{
 #' library(oce)
 #' data(argo)
 #' summary(argo)
 #' data(coastlineWorld)
 #' plot(argo, which="trajectory")
-#'}
 #'
-#' @source This file was downloaded using the unix command
-#'\preformatted{
-#' ftp ftp://ftp.ifremer.fr/ifremer/argo/dac/bodc/6900388/6900388_prof.nc
-#'} issued on 2017 July 7.
+#' @source The netcdf file used by [read.argo()] to create this [argo-class]
+#' object was downloaded using FTP to
+#' \code{ftp.ifremer.fr/ifremer/argo/dac/bodc/6900388/6900388_prof.nc}
+#' on 2020 June 24.
 #'
 #' @family datasets provided with oce
 #' @family things related to argo data
@@ -79,9 +67,10 @@ NULL
 #' @section Details of the specialized `argo` method:
 #'
 #' There are several possibilities, depending on the nature of `i`.
-#' Note that all of these calculations are done with
-#' `salinityAdjusted`, if that is present, or with `salinity`
-#' otherwise, and similar for temperature and pressure.
+#' Note that [argo-class] data may contain both unadjusted data and adjusted
+#' data.  By default, this extraction function refers to the former, but a
+#' preference for the latter may be set with [preferAdjusted()], the
+#' documentation of which explains (fairly complex) details.
 #'
 #' * If `i` is `"profile"` and `j` is an integer vector,
 #' then an argo object is returned, as specified by `j`. For example,
@@ -108,6 +97,12 @@ NULL
 #' equation of state is taken to be
 #' [`getOption`]`("oceEOS",default="gsw")`.
 #'
+#' * If `i` is `"sigma0"`, `"sigma1"`, `"sigma2"`, `"sigma3"` or `"sigma4"`,
+#' then the associated function in the \CRANpkg{gsw} package.
+#' For example, `"sigma0"` uses [gsw::gsw_sigma0()], which returns
+#' potential density anomaly referenced to 0 dbar,
+#' according to the gsw equation of state.
+#'
 #' * If `i` is `"theta"`, then
 #' potential temperature (referenced to zero
 #' pressure) is computed, with [swTheta()], where the
@@ -116,6 +111,9 @@ NULL
 #'
 #' * If `i` is `"depth"`, then
 #' a matrix of depths is returned.
+#'
+#' * If `i` is `"id"` or `"ID"`, then the `id` element within
+#' the `metadata` slot is returned.
 #'
 #' * If `i` is in the `data` slot of `x`,
 #' then it is returned, otherwise if it is in the `metadata` slot,
@@ -138,6 +136,9 @@ setMethod(f="[[",
           signature(x="argo", i="ANY", j="ANY"),
           definition=function(x, i, j, ...) {
               res <- NULL
+              dots <- list(...)
+              debug <- if ("debug" %in% names(dots)) dots$debug else 0
+              oceDebug(debug, "[[,argo-method(\"", i, "\") {\n", sep="", style="bold", unindent=1)
               if (i == "profile") {
                   ## This assignment to profile is merely to prevent a NOTE from
                   ## the syntax checker. It is needed because of issues with non-standard
@@ -150,12 +151,12 @@ setMethod(f="[[",
                       stop("must provide an integer vector to access, e.g. argo[[\"profile\", 1:3]]")
                   return(subset(x, profile %in% j))
               }
-              if (i %in% c("CT", "N2", "SA", "sigmaTheta", "theta")) {
-                  ## FIXME: should we prefer e.g. salinityAdjusted or salinity?
-                  names <- names(x@data)
-                  salinity <- x@data[[if ("salinityAdjusted" %in% names) "salinityAdjusted" else "salinity"]]
-                  pressure <- x@data[[if ("pressureAdjusted" %in% names) "pressureAdjusted" else "pressure"]]
-                  temperature <- x@data[[if ("temperatureAdjusted" %in% names) "temperatureAdjusted" else "temperature"]]
+              namesData <- names(x@data)
+              ## handle some computed items
+              if (i %in% c("CT", "N2", "SA", "sigmaTheta", "theta", "sigma0", "sigma1", "sigma2", "sigma3", "sigma4")) {
+                  salinity <- x[["salinity", debug=debug-1]]
+                  pressure <- x[["pressure", debug=debug-1]]
+                  temperature <- x[["temperature", debug=debug-1]]
                   dim <- dim(salinity)
                   ## Do not need longitude and latitude if eos="unesco", but retain for code clarity
                   longitude <- rep(x@data$longitude, each=dim[1])
@@ -181,6 +182,14 @@ setMethod(f="[[",
                       }
                   } else if (i == "SA") {
                       res <- gsw_SA_from_SP(salinity, pressure, longitude=longitude, latitude=latitude)
+                  } else if (i %in% c("sigma0", "sigma1", "sigma2", "sigma3", "sigma4")) {
+                      SA <- gsw_SA_from_SP(salinity, pressure, longitude=longitude, latitude=latitude)
+                      CT <- gsw_CT_from_t(SA, temperature, pressure)
+                      res <- switch(i, "sigma0"=gsw_sigma0(SA, CT),
+                                    "sigma1"=gsw_sigma1(SA, CT),
+                                    "sigma2"=gsw_sigma2(SA, CT),
+                                    "sigma3"=gsw_sigma3(SA, CT),
+                                    "sigma4"=gsw_sigma4(SA, CT))
                   } else if (i == "sigmaTheta") {
                       res <- swSigmaTheta(salinity, temperature=temperature, pressure=pressure,
                                           referencePressure=0, longitude=longitude, latitude=latitude,
@@ -213,14 +222,74 @@ setMethod(f="[[",
                   } else {
                       res <- swDepth(x@data$pressure, x@data$latitude)
                   }
+              } else if (i == "ID" || i == "id") {
+                  res <- x@metadata$id
               } else if (i == "latitude") {
                   res <- x@data$latitude
               } else if (i == "longitude") {
                   res <- x@data$longitude
+              } else if (i %in% c(namesData, paste0(namesData, "Flag"), paste0(namesData, "Unit"))) {
+                  ## Select adjusted or unadusted variants of things stored in the data slot, or
+                  ## their cousins stored in metadata$units and metadata$flags.
+                  wantFlag <- grepl("Flag", i)
+                  wantUnit <- grepl("Unit", i)
+                  which <- x@metadata$adjustedWhich
+                  fallback <- x@metadata$adjustedFallback
+                  iBase <- gsub("Unit$", "", gsub("Flag$", "", i)) # base name for i
+                  iBaseAdjusted <- paste0(iBase, "Adjusted")
+                  oceDebug(debug, "i='", i,
+                           "', iBase='",iBase,"', iBaseAdjusted='", iBaseAdjusted,
+                           "', wantFlag=", wantFlag, ", wantUnit=", wantUnit, "\n", sep="")
+                  unadjusted <- if (wantUnit) {
+                      x@metadata$units[[iBase]]
+                  } else if (wantFlag) {
+                      x@metadata$flags[[iBase]]
+                  } else {
+                      x@data[[iBase]]
+                  }
+                  adjusted <- if (wantUnit) {
+                      x@metadata$units[[iBaseAdjusted]]
+                  } else if (wantFlag) {
+                      x@metadata$flags[[iBaseAdjusted]]
+                  } else {
+                      x@data[[iBaseAdjusted]]
+                  }
+                  if (!is.null(which) && !is.null(fallback)) {
+                      ## The handling of adjusted/unadjusted preference is carried out in cases;
+                      ## the debugging statements explain the logic flow here in the code, and
+                      ## also expose it to the user (in hopes that users may notice if there are
+                      ## errors with respect to the documented behaviour).
+                      if (which == "all" || i %in% which) {
+                          if (is.null(adjusted)) {
+                              oceDebug(debug, "Case 1: returning unadjusted item, since the adjusted item does not exist.\n")
+                              res <- unadjusted
+                          } else {
+                              if (any(is.finite(adjusted))) {
+                                  oceDebug(debug, "Case 2: returning adjusted data.\n")
+                                  res <- adjusted
+                              } else {
+                                  if (fallback) {
+                                      oceDebug(debug, "Case 3: returning unadjusted data, since all adjusted values are NA and metadata$adjustedFallback=", fallback, "\n")
+                                      res <- unadjusted
+                                  } else {
+                                      oceDebug(debug, "Case 4: returning adjusted data, even though all are are NA, because metadata$adjustedFallback=", fallback, "\n", sep="")
+                                      res <- adjusted
+                                  }
+                              }
+                          }
+                      } else {
+                          oceDebug(debug, "Case 5: returning unadjusted data, because \"", i, "\" is not in metadata$adjustedWhich.\n", sep="")
+                          res <- unadjusted
+                      }
+                  } else {
+                      oceDebug(debug, "Case 6: returning unadjusted data, since metadata slot does not contain adjustedWhich and adjustedFallback\n")
+                      res <- unadjusted
+                  }
               } else {
                   ##message("FIXME: [[,argo-method calling next method")
                   res <- callNextMethod()         # [[ defined in R/AllClass.R
               }
+              oceDebug(debug, "} # [[,argo-method\n", sep="", style="bold", unindent=1)
               res
           })
 
@@ -252,6 +321,7 @@ setMethod(f="initialize",
               .Object@metadata$dataMode <- if (missing(dataMode)) "" else dataMode
               .Object@processingLog$time <- presentTime()
               .Object@processingLog$value <- "create 'argo' object"
+              .Object <- initializeFlagScheme(.Object, "argo")
               return(.Object)
           })
 
@@ -288,7 +358,7 @@ getData <- function(file, name, quiet=FALSE)
 #' The inference of names was done
 #' by inspection of some data files, based on reference 1. It should be noted,
 #' however, that the data files examined contain some names that are not
-#' undocumented in reference 1, and others that are listed only in its changelog,
+#' documented in reference 1, and others that are listed only in its changelog,
 #' with no actual definitions being given. For example, the files had six distinct
 #' variable names that seem to relate to phase in the oxygen sensor, but
 #' these are not translated by the present function because these
@@ -372,7 +442,7 @@ getData <- function(file, name, quiet=FALSE)
 #'
 #' @references
 #' 1. Argo User's Manual Version 3.3, Nov 89th, 2019, available at
-#' \url{https://archimer.ifremer.fr/doc/00187/29825/}
+#' \url{https://archimer.ifremer.fr/doc/00187/29825/} online.
 #'
 #' 2. Argo list of parameters in an excel spreadsheet, available at
 #' \url{http://www.argodatamgt.org/content/download/27444/187206/file/argo-parameters-list-core-and-b.xlsx}
@@ -428,7 +498,6 @@ argoNames2oceNames <- function(names, ignore.case=TRUE)
     names
 }
 
-
 #' Subset an Argo Object
 #'
 #' Subset an argo object, either by selecting just the "adjusted" data
@@ -451,8 +520,9 @@ argoNames2oceNames <- function(names, ignore.case=TRUE)
 #' independent variable.  Subsetting may be done by anything
 #' stored in the data, e.g. `time`,
 #' `latitude`, `longitude`, `profile`, `dataMode`,
-#' or `pressure` or by `profile` (a made-up variable)
-#' or `id` (from the `metadata` slot). Note that subsetting by `pressure`
+#' or `pressure` or by `profile` (a made-up variable),
+#' `id` (from the `metadata` slot) or `ID` (a synonym for `id`).
+#' Note that subsetting by `pressure`
 #' preserves matrix shape, by setting discarded values to `NA`, as opposed
 #' to dropping data (as is the case with `time`, for example).
 #'
@@ -467,13 +537,13 @@ argoNames2oceNames <- function(names, ignore.case=TRUE)
 #' `latitude`; see Example 4.  If `within` is given,
 #' then `subset` is ignored.
 #'
-#' @return An argo object.
+#' @return An [argo-class] object.
 #'
 #' @examples
 #' library(oce)
 #' data(argo)
 #'
-#' # Example 1: buset by time, longitude, and pressure
+#' # Example 1: subset by time, longitude, and pressure
 #' par(mfrow=c(2,2))
 #' plot(argo)
 #' plot(subset(argo, time > mean(time)))
@@ -481,23 +551,28 @@ argoNames2oceNames <- function(names, ignore.case=TRUE)
 #' plot(subset(argoGrid(argo), pressure > 500 & pressure < 1000), which=5)
 #'
 #' # Example 2: restrict attention to delayed-mode profiles.
+#'\dontrun{
 #' par(mfrow=c(1, 1))
 #' plot(subset(argo, dataMode == "D"))
+#'}
 #'
-#' # Example 3: contrast corrected and uncorrected data
-#' par(mfrow=c(1,2))
+#' # Example 3: contrast adjusted and unadjusted data
+#'\dontrun{
+#' par(mfrow=c(1, 2))
 #' plotTS(argo)
 #' plotTS(subset(argo, "adjusted"))
+#'}
 #'
 #' # Example 4. Subset by a polygon determined with locator()
 #'\dontrun{
-#' par(mfrow=c(2, 1))
+#' par(mfrow=c(1, 2))
 #' plot(argo, which="map")
-#' bdy <- locator(4) # Click the mouse on 4 boundary points
-#' argoSubset <- subset(argo, within=bdy)
+#' ## Can get a boundary with e.g. locator(4)
+#' boundary <- list(x=c(-65, -40, -40, -65), y=c(65, 65, 45, 45))
+#' argoSubset <- subset(argo, within=boundary)
 #' plot(argoSubset, which="map")
 #'}
-#'
+#
 #' @author Dan Kelley
 #'
 #' @family things related to argo data
@@ -506,16 +581,16 @@ argoNames2oceNames <- function(names, ignore.case=TRUE)
 setMethod(f="subset",
           signature="argo",
           definition=function(x, subset, ...) {
-              subsetString <- paste(deparse(substitute(subset)), collapse=" ")
+              subsetString <- paste(deparse(substitute(expr=subset, env=environment())), collapse=" ")
               res <- x
               dots <- list(...)
               dotsNames <- names(dots)
               withinGiven <- length(dots) && ("within" %in% dotsNames)
-              debug <- getOption("oceDebug")
-              if (length(dots) && ("debug" %in% names(dots)))
-                  debug <- dots$debug
+              debug <- if (length(dots) && ("debug" %in% names(dots))) dots$debug else getOption("oceDebug")
+              oceDebug(debug, "subset,argo-method() {\n", sep="", unindent=1, style="bold")
               if (withinGiven) {
-                  oceDebug(debug, "subsetting with 'within' method")
+                  oceDebug(debug, "subsetting with 'within' method\n")
+                  ## {{{ OLD 'sp::point.in.polygon' method
                   polygon <- dots$within
                   if (!is.data.frame(polygon) && !is.list(polygon))
                       stop("'within' must be a data frame or a polygon")
@@ -541,29 +616,48 @@ setMethod(f="subset",
                   } else {
                       stop("cannot use 'within' because the 'sp' package is not installed")
                   }
+                  ## }}}
+                  ## {{{ NEW 'sf' method
+                  ## Compare with 'sf' results
+                  polyNew <- sf::st_polygon(list(outer=cbind(c(lonp, lonp[1]), c(latp, latp[1]))))
+                  pointsNew <- sf::st_multipoint(cbind(lon, lat))
+                  insideNew <- sf::st_intersection(pointsNew, polyNew)
+                  keepNew <- matrix(pointsNew %in% insideNew, ncol=2)[,1]
+                  if (!all.equal(keepNew, keep)) {
+                      warning("subset,argo-method disagreement between old 'sp' method and new 'sf' method\n")
+                  } else {
+                      oceDebug(debug, "subset,argo-method: old 'sp' method and new 'sf' method gave identical results\n");
+                  }
+                  ## }}}
                   ## Metadata
                   for (name in names(x@metadata)) {
-                      oceDebug(debug, "subsetting metadata item named '", name, "'\n", sep="")
-                      ## Pass oce-generated things through directly.
-                      if (name %in% c("units", "flags", "filename", "flagScheme", "dataNamesOriginal")) {
-                          ##.message("  ... special case, so passed directly")
+                      oceDebug(debug, "subsetting metadata item named '", name, "'.\n", sep="")
+                      ## Pass some things through directly.
+                      ## 20200831 if (name %in% c("units", "flags", "filename", "flagScheme", "dataNamesOriginal")) {
+                      if (name %in% c("units", "filename", "flagScheme", "dataNamesOriginal"))
                           next
-                      }
                       item <- x@metadata[[name]]
-                      ## Handle things that are encoded as characters in a string,
-                      ## namely 'direction', 'juldQc', and 'positionQc'.
-                      if (is.character(item) && length(item) == 1) {
-                          ##.message("'", name, "' is character-encoded")
+                      ## Handle things that are encoded as characters in a string, namely 'direction', 'juldQC', 'positionQC',
+                      ## and some other 'QC` things that are found by grepping.
+                      if (name == "direction" || grepl("QC$", name)) {
+                          oceDebug(debug, "  \"", name, "\" is a special string ('direction' or '*QC'), being subsetted by character number\n", sep="")
                           res@metadata[[name]] <- paste(strsplit(item,"")[[1]][keep],collapse="")
-                          ##.message(" ... ok")
+                      } else if (is.list(item)) {
+                          oceDebug(debug, "  \"", name, "\" is a list, with each element being subsetted\n", sep="")
+                          for (l in seq_along(item)) {
+                              res@metadata[[name]][[l]] <- item[[l]][, keep, drop=FALSE]
+                          }
                       } else if (is.vector(name)) {
-                          ##.message("'", name, "' is a vector")
                           res@metadata[[name]] <- item[keep]
-                          ##.message(" ... ok")
                       } else if (is.matrix(name)) {
-                          ##.message("'", name, "' is a matrix")
-                          res@metadata[[name]] <- item[, keep]
-                          ##.message(" ... ok")
+                          res@metadata[[name]] <- item[, keep, drop=FALSE]
+                      } else if (is.array(name)) {
+                          oceDebug(debug, "name=", name, " has dim ", paste(dim(res@metadata[[name]]), collapse=" "), "\n")
+                          if (length(dim(res@metadata[[name]])) <= 3) {
+                              res@metadata[[name]] <- item[, , keep, drop=FALSE]
+                          } else {
+                              warning("not subsetting \"", name, "\" in metadata, because it is an array of rank > 3")
+                          }
                       } else {
                           stop("cannot subset metadata item named '", name, "' because it is not a length-one string, a vector, or a matrix")
                       }
@@ -592,7 +686,7 @@ setMethod(f="subset",
                                                            paste("subset(x, within) kept ", sum(keep), " of ",
                                                                  length(keep), " stations", sep=""))
               } else {
-                  if (is.character(substitute(subset))) {
+                  if (is.character(substitute(expr=subset, env=environment()))) {
                   if (subset != "adjusted")
                       stop("if subset is a string, it must be \"adjusted\"")
                   dataNames <- names(x@data)
@@ -629,22 +723,22 @@ setMethod(f="subset",
                                                            paste("subset.argo(x, subset=\"",
                                                                  as.character(subset), "\")", sep=""))
               } else {
-                  subsetString <- paste(deparse(substitute(subset)), collapse=" ")
+                  subsetString <- paste(deparse(substitute(expr=subset, env=environment())), collapse=" ")
                   res <- x
                   if (length(grep("time", subsetString)) ||
                       length(grep("longitude", subsetString)) || length(grep("latitude", subsetString))) {
-                      keep <- eval(substitute(subset), x@data, parent.frame(2))
-                  } else if (length(grep("id", subsetString))) {
+                      keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
+                  } else if (length(grep("id", subsetString, ignore.case=TRUE))) {
                       ## add id into the data, then do as usual
                       tmp <- x@data
                       tmp$id <- x@metadata$id
-                      keep <- eval(substitute(subset), tmp, parent.frame(2))
+                      keep <- eval(expr=substitute(expr=subset, env=environment()), envir=tmp, enclos=parent.frame(2))
                       rm(tmp)
                   } else if (length(grep("profile", subsetString))) {
                       ## add profile into the data, then do as usual
                       tmp <- x@data
                       tmp$profile <- seq_along(x@data$time)
-                      keep <- eval(substitute(subset), tmp, parent.frame(2))
+                      keep <- eval(expr=substitute(expr=subset, env=environment()), envir=tmp, enclos=parent.frame(2))
                       rm(tmp)
                   } else if (length(grep("pressure", subsetString))) {
                       ## issue1628 ## check that it is a "gridded" argo
@@ -656,9 +750,9 @@ setMethod(f="subset",
                       ## issue1628 } else {
                       ## issue1628     stop("cannot subset ungridded argo by pressure -- use argoGrid() first", call.=FALSE)
                       ## issue1628 }
-                      keep <- eval(substitute(subset), x@data, parent.frame(2))
+                      keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
                   } else if (length(grep("dataMode", subsetString))) {
-                      keep <- eval(substitute(subset), x@metadata, parent.frame(2))
+                      keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@metadata, enclos=parent.frame(2))
                   } else {
                       stop("can only subset by time, longitude, latitude, pressure, dataMode, and not by combinations", call.=FALSE)
                   }
@@ -715,6 +809,7 @@ setMethod(f="subset",
                   res@processingLog <- processingLogAppend(res@processingLog, paste("subset.argo(x, subset=", subsetString, ")", sep=""))
                   }
               }
+              oceDebug(debug, "} # subset,argo-method\n", sep="", unindent=1, style="bold")
               res
           })
 
@@ -746,6 +841,8 @@ setMethod(f="summary",
               if (1 == nid)
                    cat("* id:                  \"", object@metadata$id[1], "\"\n", sep="")
               else cat("* id list:             \"", object@metadata$id[1], "\", \"", object@metadata$id[2], "\", ...\n", sep="")
+              if ("featureType" %in% names(object@metadata))
+                  cat("* feature type:        \"", object@metadata$featureType, "\"\n", sep="")
               nD <- sum(object@metadata$dataMode == "D")
               nA <- sum(object@metadata$dataMode == "A")
               nR <- sum(object@metadata$dataMode == "R")
@@ -867,24 +964,11 @@ argoDecodeFlags <- function(f) # local function
 
 #' Read an Argo Data File
 #'
-#' `read.argo` is used to read an Argo file, producing an object of type
-#' `argo`. The file must be in the ARGO-style NetCDF format described at
+#' `read.argo` is used to read an Argo file, producing an [argo-class] object.
+#' The file must be in the ARGO-style NetCDF format described
 #' in the Argo documentation (see references 2 and 3).
 #'
 #' @details
-#'
-#' Items are inferred from the data file in a straightforward way, using
-#' [ncdf4::ncvar_get()], converting from one-column matrices
-#' to vectors, and trimming leading and trailing blank space in character
-#' values, using [trimString()].
-#'
-#' Items are renamed from the argo ('snake case') forms to oce ('camel
-#' case') forms with [argoNames2oceNames()]. For example,
-#' `FIRMWARE_VERSION` in the data file is renamed as
-#' `firmwareVersion` in the return value.
-#' Note that some files use upper-case for items, while other files
-#' use lower-case for the same things; `read.argo` attempts
-#' to ignore this variation.
 #'
 #' See the Argo documentation (see references 2 and 3) for some details on what files contain.
 #' Many items listed in section 2.2.3 of reference 3 are read from the
@@ -892,43 +976,73 @@ argoDecodeFlags <- function(f) # local function
 #' `longitude` and `latitude`, which are stored in the
 #' `data` slot, alongside hydrographic information.
 #'
-#' The following global attributes stored within the netcdf file are stored in the
-#' `metadata` slot: `title`, `institution`, `source`,
-#' `history`, `references`, `userManualVersion`, `conventions`,
-#' and `featureType`. These names are identical to those in the netcdf
-#' file, except that `userManualVersion` is named
-#' `user_manual_version` in the file, and `conventions` is
-#' named `Conventions` in the file.
+#' The names of several data parameters stored within the netCDF file
+#' are altered to fit the oce context. For example, `PRES` becomes `pressure`,
+#' matching the name of this variable in other oce data types.
+#' The original names are reported by `summary,argo-method`, and
+#' data may be extracted with `[[,argo-method` using those names, so
+#' the renaming should not be too inconvenient to Argo experts who
+#' are new to oce.
 #'
-#' It is assumed that the profile data are as listed in the NetCDF variable
-#' called `STATION_PARAMETERS`. Each item can have variants, as
+#' Several of the netCDF global attributes are also renamed before
+#' placement in the `metadata` slot of the return value.  These include
+#' `conventions`, `featureType`, `history`, `institution`,
+#' `nParameters`, `nProfiles`,  `references`, `source`, `title`,
+#' and `userManualVersion`.
+#' These names are derived from those in the netcdf
+#' file, and mainly follow the pattern explained in the
+#' \dQuote{Variable renaming convention} section.
+#'
+#' For profile data (as indicated by the NetCDF global attribute
+#' named `"featureType"` being equal to `"trajectoryProfile"`),
+#' the NetCDF item named `"STATION_PARAMETERS"` controls
+#' whether variables in the source file will be stored in the
+#' `metadata` or `data` slot of the returned object.
+#' If `STATION_PARAMETERS` is not present, as is the case for
+#' trajectory files (which are detected by `featureType` being
+#' `"trajectory"`), some guesses are made as to what goes in
+#' `data` and `metadata` slots.
+#'
+#' Each data item can have variants, as
 #' described in Sections 2.3.4 of reference 3.
 #' For example, if `"PRES"` is found in `STATION_PARAMETERS`,
 #' then `PRES` (pressure) data are sought in the file, along with
 #' `PRES_QC`, `PRES_ADJUSTED`, `PRES_ADJUSTED_QC`, and
 #' `PRES_ERROR`. The same pattern works for other profile data. The variables
-#' are stored with different names within the resultant [argo-class]
-#' object, to match with `oce` conventions. Thus, `PRES` gets renamed
-#' `pressure`, while `PRES_ADJUSTED` gets renamed `pressureAdjusted`,
-#' and `PRES_ERROR` gets renamed `pressureError`; all of these are
-#' stored in the `data` slot. Meanwhile, the quality-control flags
-#' `PRES_QC` and `PRES_ADJUSTED_QC` are stored as `pressure`
-#' and `pressureAdjusted` in the `metadata$flags` slot.
+#' are stored with names created as explained in the
+#' \dQuote{Variable renaming convention} section below. Note that
+#' flags, which are stored variables ending in `"_QC"` in the netcdf
+#' file, are stored in the `flags` item within the `metadata` slot
+#' of the returned object; thus, for example,
+#' `PRES_QC` is stored as `pressure` in `flags`.
 #'
-#' Once a predefined series of items are inferred and stored in either the
-#' `metadata` or `data` slot, `read.argo` then reads all
-#' non-empty variables in the file, storing them in the `metadata`
-#' slot, using with the original ('snake case') name that is used in
-#' the data file. (Note that the sample dataset accessed with `data(argo)`
-#' lacks metadata items with names starting with `HISTORY_`, because
-#' those are zero-length in the source file.)
+#' @section Variable renaming convention:
+#' Argo netcdf files employ a `"SNAKE_CASE"` naming scheme (sometimes
+#' using lower case) that is inconsistent with the `"camelCase"` scheme
+#' used in oce. Since argo objects are just a small part of oce, a decision
+#' was made to rename argo items. For example, `"CYCLE_NUMBER"` in the netcdf file
+#' becomes `"cycleNumber"` in the oce object returned by `read.argo`.
+#' The conversion for objects in the `data` slot often also involves
+#' expanding on argo abbreviations, e.g. `"PSAL"` becomes `"salinity"`.
+#' The renaming work is carried out with [argoNames2oceNames()] for
+#' handles both name expansion for several dozen special cases,
+#' and with [snakeToCamel()] with the `specialCase` argument
+#' set to `"QC"`. While this results in variable names that should make
+#' sense in the general oce context (where, for example, salinity is expected
+#' to be stored in a variable named `"salinity"`), it may be confusing
+#' to argo experts who are just starting to use oce.  Such people might
+#' find it helpful to use e.g. `sort(names(x[["metadata"]]))` to get a list
+#' of all items in the `metadata` slot (or similar with `"data"`), since working
+#' in reverse may be easier than simply guessing at what names oce has chosen.
+#' (Note that prior to 2020 June 24, some metadata items were stored in
+#' `"SNAKE_CASE"`.)
 #'
-#' @param file a character string giving the name of the file to load.
+#' @param file A character string giving the name of the file to load.
 #'
-#' @param debug a flag that turns on debugging.  Set to 1 to get a moderate amount
+#' @param debug A flag that turns on debugging.  Set to 1 to get a moderate amount
 #' of debugging information, or to 2 to get more.
 #'
-#' @param processingLog if provided, the action item to be stored in the log.
+#' @param processingLog If provided, the action item to be stored in the log.
 #' (Typically only provided for internal calls; the default that it provides is
 #' better for normal calls by a user.)
 #'
@@ -968,10 +1082,10 @@ argoDecodeFlags <- function(f) # local function
 #' objects, and also outlines the other functions dealing with them.
 #'
 #' @references
-#' 1. \url{http://www.argo.ucsd.edu/}
+#' 1. \url{https://argo.ucsd.edu}
 #'
-#' 2. Argo User's Manual Version 3.3, Nov 89th, 2019, available at
-#' \url{https://archimer.ifremer.fr/doc/00187/29825/}
+#' 2. Argo User's Manual Version 3.2, Dec 29th, 2015, available at
+#' \url{https://archimer.ifremer.fr/doc/00187/29825/} online.
 #'
 #' 3. User's Manual (ar-um-02-01) 13 July 2010, available at
 #' \url{http://www.argodatamgt.org/content/download/4729/34634/file/argo-dm-user-manual-version-2.3.pdf},
@@ -981,9 +1095,9 @@ argoDecodeFlags <- function(f) # local function
 #' Argo data are made available at several websites. A bit of detective
 #' work can be required to track down the data.
 #'
-#' Some servers provide  data for floats that surfaced in a given ocean
+#' Some servers provide data for floats that surfaced in a given ocean
 #' on a given day, the anonymous FTP server
-#' \code{ftp://usgodae.org/pub/outgoing/argo/geo/} being an example.
+#' \code{usgodae.org/pub/outgoing/argo/geo/} being an example.
 #'
 #' Other servers provide data on a per-float basis. A complicating
 #' factor is that these data tend to be categorized by "dac" (data
@@ -992,7 +1106,7 @@ argoDecodeFlags <- function(f) # local function
 #' \code{https://www.usgodae.org/ftp/outgoing/argo/} is the top level of
 #' a such a repository. If the ID of a float is known but not the
 #' "dac", then a first step is to download the text file
-#' \code{http://www.usgodae.org/ftp/outgoing/argo/ar_index_global_meta.txt}
+#' \code{https://www.usgodae.org/ftp/outgoing/argo/ar_index_global_meta.txt}
 #' and search for the ID. The first few lines of that file are header,
 #' and after that the format is simple, with columns separated by slash
 #' (`/`). The dac is in the first such column and the float ID in the
@@ -1020,6 +1134,7 @@ argoDecodeFlags <- function(f) # local function
 #' @family things related to argo data
 read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
 {
+    debug <- max(0, min(2, floor(as.numeric(debug))))
     if (!missing(file) && is.character(file) && 0 == file.info(file)$size)
         stop("empty file")
     if (!requireNamespace("ncdf4", quietly=TRUE))
@@ -1040,9 +1155,12 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
             on.exit(ncdf4::nc_close(file))
         }
     }
-    oceDebug(debug, "read.argo(file=\"", filename, "\", ...) {\n", sep="", unindent=1)
+    oceDebug(debug, "read.argo(file=\"", filename, "\", ...) {\n", sep="", unindent=1, style="bold")
     varNames <- names(file$var)
+
+    ## 'lc' will be TRUE if the data names are in lower case
     lc <- "data_type" %in% varNames
+    oceDebug(debug, "File convention inferred to be ", if (lc) "lower-case" else "upper-case", ".\n", sep="")
     res <- new("argo")
     ## columnNames <- gsub(" *$", "", gsub("^ *", "", unique(as.vector(ncvar_get(f, maybeLC("STATION_PARAMETERS", lc))))))
     ## QCNames <- paste(columnNames, "_QC",  sep="")
@@ -1066,13 +1184,13 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
 
     varNamesOmit <- function(v, o)
     {
-        where <- which(o == v)
+        where <- which(tolower(o) == tolower(v))
         if (length(where))
             v <- v[-where[1]]
         v
     }
 
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), " [phase 1]\n", sep="")
+    oceDebug(debug-1, "At processing step  1, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$id <- if (maybeLC("PLATFORM_NUMBER", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("PLATFORM_NUMBER", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "PLATFORM_NUMBER")
@@ -1095,86 +1213,121 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
     res@metadata$projectName <- if (maybeLC("PROJECT_NAME", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("PROJECT_NAME", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "PROJECT_NAME")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), " [phase 2]\n")
+    oceDebug(debug-1, "Extracting PROJECT_NAME\n")
+    oceDebug(debug-1, "At processing step  2, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$PIName <- if (maybeLC("PI_NAME", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("PI_NAME", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "PI_NAME")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), " [phase 3]\n")
-    res@metadata$stationParameters <- if (maybeLC("STATION_PARAMETERS", lc) %in% varNames)
-        trimString(ncdf4::ncvar_get(file, maybeLC("STATION_PARAMETERS", lc))) else NULL
+    oceDebug(debug-1, "Extracting PI_NAME\n")
+    oceDebug(debug-1, "At processing step  3, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
+    res@metadata$stationParameters <- NULL
+    res@metadata$nParameters <- file$dim$N_PARAM$len
+    res@metadata$nProfiles <- file$dim$N_PROF$len
+    if (maybeLC("STATION_PARAMETERS", lc) %in% varNames) {
+        res@metadata$stationParameters <- trimString(ncdf4::ncvar_get(file, maybeLC("STATION_PARAMETERS", lc)))
+        if (is.null(res@metadata$stationParameters))
+            warning("This file has nothing listed in its STATION_PARAMETERS item, so pressure, salinity, temperature, etc. are being stored in the metadata slot instead of the data slot. This will cause problems in further processing.")
+    } else {
+        ## print(sort(names(file$var)))
+        if (res@metadata$featureType != "trajectory")
+            warning("This 'profile'-type file lacks a STATION_PARAMETERS item, so guesses were on whether to store items in the 'metadata' or 'data' slot. This may lead cause problems.")
+        for (want in c("PSAL", "TEMP", "PRES")) {
+            if (want %in% toupper(varNames)) {
+                res@metadata$stationParameters <- c(res@metadata$stationParameters, want)
+                oceDebug(debug, "Will try to extract \"", want, "\" as a special case, because STATION_PARAMETERS is missing.\n", sep="")
+            }
+        }
+    }
     varNames <- varNamesOmit(varNames, "STATION_PARAMETERS")
-    oceDebug(debug-1, "STATION_PARAMETERS\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), " [phase 4]\n")
+    oceDebug(debug-1, "Extracting STATION_PARAMETERS (if it exists)\n")
+    oceDebug(debug-1, "At processing step  4, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
+
+    oceDebug(debug-1, "Extracting CYCLE_NUMBER\n")
     res@metadata$cycleNumber <- if (maybeLC("CYCLE_NUMBER", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("CYCLE_NUMBER", lc))) else NULL
     varNames <- varNamesOmit(varNames, "CYCLE_NUMBER")
-    oceDebug(debug-1, "CYCLE_NUMBER\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), " [phase 5]\n")
+
+    oceDebug(debug-1, "Extracting CYCLE_NUMBER_INDEX\n")
+    res@metadata$cycleNumberIndex <- if (maybeLC("CYCLE_NUMBER_INDEX", lc) %in% varNames)
+        as.vector(ncdf4::ncvar_get(file, maybeLC("CYCLE_NUMBER_INDEX", lc))) else NULL
+    varNames <- varNamesOmit(varNames, "CYCLE_NUMBER_INDEX")
+
+    oceDebug(debug-1, "Extracting CYCLE_NUMBER_ADJUSTED\n")
+    res@metadata$cycleNumberAdjusted <- if (maybeLC("CYCLE_NUMBER_ADJUSTED", lc) %in% varNames)
+        as.vector(ncdf4::ncvar_get(file, maybeLC("CYCLE_NUMBER_ADJUSTED", lc))) else NULL
+    varNames <- varNamesOmit(varNames, "CYCLE_NUMBER_ADJUSTED")
+
+    oceDebug(debug-1, "Extracting CYCLE_NUMBER_ADJUSTED_INDEX\n")
+    res@metadata$cycleNumberAdjustedIndex <- if (maybeLC("CYCLE_NUMBER_ADJUSTED_INDEX", lc) %in% varNames)
+        as.vector(ncdf4::ncvar_get(file, maybeLC("CYCLE_NUMBER_ADJUSTED_INDEX", lc))) else NULL
+    varNames <- varNamesOmit(varNames, "CYCLE_NUMBER_ADJUSTED_INDEX")
+
+    oceDebug(debug-1, "At processing step  5, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$direction <- if (maybeLC("DIRECTION", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("DIRECTION", lc))) else NULL
     varNames <- varNamesOmit(varNames, "DIRECTION")
-    oceDebug(debug-1, "DIRECTION\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting DIRECTION\n")
+    oceDebug(debug-1, "At processing step  6, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$dataCentre <- if (maybeLC("DATA_CENTRE", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("DATA_CENTRE", lc))) else NULL
     varNames <- varNamesOmit(varNames, "DATA_CENTRE")
-    oceDebug(debug-1, "DATA_CENTRE\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting DATA_CENTRE\n")
+    oceDebug(debug-1, "At processing step  7, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$DCReference <- if (maybeLC("DC_REFERENCE", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("DC_REFERENCE", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "DC_REFERENCE")
-    oceDebug(debug-1, "DC_REFERENCE\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting DC_REFERENCE\n")
+    oceDebug(debug-1, "At processing step  8, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$dataStateIndicator <- if (maybeLC("DATA_STATE_INDICATOR", lc) %in% varNames)
-        as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("DATA_STATE_INDICATOR", lc)))) else NULL
+        as.vector(trimws(ncdf4::ncvar_get(file, maybeLC("DATA_STATE_INDICATOR", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "DATA_STATE_INDICATOR")
-    oceDebug(debug-1, "DATA_STATE_INDICATOR\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting DATA_STATE_INDICATOR\n")
+    oceDebug(debug-1, "At processing step  9, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$dataMode <- if (maybeLC("DATA_MODE", lc) %in% varNames)
         strsplit(ncdf4::ncvar_get(file, maybeLC("DATA_MODE", lc)), "")[[1]] else NULL
     varNames <- varNamesOmit(varNames, "DATA_MODE")
-    oceDebug(debug-1, "DATA_MODE\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting DATA_MODE\n")
+    oceDebug(debug-1, "At processing step 10, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$instReference <- if (maybeLC("INST_REFERENCE", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("INST_REFERENCE", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "INST_REFERENCE")
-    oceDebug(debug-1, "INST_REFERENCE\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting INST_REFERENCE\n")
+    oceDebug(debug-1, "At processing step 11, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$firmwareVersion <- if (maybeLC("FIRMWARE_VERSION", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("FIRMWARE_VERSION", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "FIRMWARE_VERSION")
-    oceDebug(debug-1, "FIRMWARE_REFERENCE\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting FIRMWARE_REFERENCE\n")
+    oceDebug(debug-1, "At processing step 12, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$WMOInstType <- if (maybeLC("WMO_INST_TYPE", lc) %in% varNames)
         as.vector(trimString(ncdf4::ncvar_get(file, maybeLC("WMO_INST_TYPE", lc)))) else NULL
     varNames <- varNamesOmit(varNames, "WMO_INST_TYPE")
-    oceDebug(debug-1, "WMO_INST_TYPE\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting WMO_INST_TYPE\n")
+    oceDebug(debug-1, "At processing step 13, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$juld <- if (maybeLC("JULD", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("JULD", lc))) else NULL
     varNames <- varNamesOmit(varNames, "JULD")
-    oceDebug(debug-1, "JULD\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting JULD\n")
+    oceDebug(debug-1, "At processing step 14, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     ## set up 'time' also
     t0s <- as.vector(ncdf4::ncvar_get(file, maybeLC("REFERENCE_DATE_TIME", lc)))
     varNames <- varNamesOmit(varNames, "REFERENCE_DATE_TIME")
-    oceDebug(debug-1, "REFERENCE_DATE_TIME\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting REFERENCE_DATE_TIME\n")
+    oceDebug(debug-1, "At processing step 15, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     t0 <- strptime(t0s, "%Y%m%d%M%H%S", tz="UTC")
     ##julianDayTime <- as.vector(ncdf4::ncvar_get(file, maybeLC("JULD", lc)))
     res@data$time <- t0 + res@metadata$juld * 86400
     rm(list=c("t0s", "t0")) # no longer needed
 
-    res@metadata$juldQc <- if (maybeLC("JULD_QC", lc) %in% varNames)
+    res@metadata$juldQC <- if (maybeLC("JULD_QC", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("JULD_QC", lc))) else NULL
     varNames <- varNamesOmit(varNames, "JULD_QC")
-    oceDebug(debug-1, "JULD_QC\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting JULD_QC\n")
+    oceDebug(debug-1, "At processing step 16, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
     res@metadata$juldLocation <- if (maybeLC("JULD_LOCATION", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("JULD_LOCATION", lc))) else NULL
     varNames <- varNamesOmit(varNames, "JULD_LOCATION")
-    oceDebug(debug-1, "JULD_LOCATION\n")
-    oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
+    oceDebug(debug-1, "Extracting JULD_LOCATION\n")
+    oceDebug(debug-1, "At processing step 17, the ", length(varNames), " varnames are: c(\"", paste(sort(varNames), collapse="\",\""), "\")\n", sep="")
 
     ## Now for the data.
     res@metadata$dataNamesOriginal <- list() # NB. will store upper-case names
@@ -1202,7 +1355,7 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
                 list(unit=expression(degree*E), scale="") else list(unit=expression(degree*W), scale="")
     }
 
-    res@metadata$positionQc <- if (maybeLC("POSITION_QC", lc) %in% varNames)
+    res@metadata$positionQC <- if (maybeLC("POSITION_QC", lc) %in% varNames)
         as.vector(ncdf4::ncvar_get(file, maybeLC("POSITION_QC", lc))) else NULL
     varNames <- varNamesOmit(varNames, "POSITION_QC")
     oceDebug(debug-1, "POSITION_QC\n")
@@ -1213,48 +1366,85 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
     oceDebug(debug-1, "POSITIONING_SYSTEM\n")
     oceDebug(debug-1, "varNames=", paste(varNames, collapse=","), "\n")
     stationParameters <- unique(as.vector(res@metadata$stationParameters)) # will be PRES, TEMP etc
+
     ## Handle units before getting the data. (We must do it here, because when
     ## we read the data, we remove entries from varNames ... that is how
     ## we know what is left over at the end, to be shoved into metadata.)
+    ## FIXME: it would be nice to automate this more, to handle cases not handled
+    ## in the hardwired code below.
+
+    ## Oxygen: DOXY DOXY_ADJUSTED DOXY_ADJUSTED_ERROR
+    if (maybeLC("DOXY", lc) %in% varNames) {
+        attTMP <- ncdf4::ncatt_get(file, maybeLC("DOXY", lc), "units")
+        if (attTMP$hasatt) {
+            if (attTMP$value == "micromole/kg") {
+                res@metadata$units$oxygen <- list(unit=expression(mu*mol/kg),scale="")
+            } else {
+                warning("skipping oxygen unit '", attTMP$value, "' because only understood unit is 'micromole/kg'", sep="")
+            }
+        }
+    }
+    if (maybeLC("DOXY_ADJUSTED", lc) %in% varNames) {
+        ## print(ncdf4::ncatt_get(file, maybeLC("DOXY", lc), "long_name"))
+        attTMP <- ncdf4::ncatt_get(file, maybeLC("DOXY_ADJUSTED", lc), "units")
+        if (attTMP$hasatt) {
+            if (attTMP$value == "micromole/kg") {
+                res@metadata$units$oxygenAdjusted <- list(unit=expression(mu*mol/kg),scale="")
+            } else {
+                warning("skipping oxygenAdjusted unit '", attTMP$value, "' because only understood unit is 'micromole/kg'", sep="")
+            }
+        }
+    }
+    if (maybeLC("DOXY_ADJUSTED_ERROR", lc) %in% varNames) {
+        ## print(ncdf4::ncatt_get(file, maybeLC("DOXY", lc), "long_name"))
+        attTMP <- ncdf4::ncatt_get(file, maybeLC("DOXY_ADJUSTED_ERROR", lc), "units")
+        if (attTMP$hasatt) {
+            if (attTMP$value == "micromole/kg") {
+                res@metadata$units$oxygenAdjustedError <- list(unit=expression(mu*mol/kg),scale="")
+            } else {
+                warning("skipping oxygenAdjustedError unit '", attTMP$value, "' because only understood unit is 'micromole/kg'", sep="")
+            }
+        }
+    }
+
+    ## Temperature: TEMP, TEMP_ADJUSTED, TEMP_ADJUSTED_ERROR
     if (maybeLC("TEMP", lc) %in% varNames) {
-        ## leave some code in case we get a newer scale
         if (1 == length(grep("ITS-90", ncdf4::ncatt_get(file, maybeLC("TEMP", lc), "long_name")$value, ignore.case=TRUE)))
             res@metadata$units$temperature <- list(unit=expression(degree *C), scale="ITS-90")
         else res@metadata$units$temperature <- list(unit=expression(degree *C), scale="ITS-90")
     }
     if (maybeLC("TEMP_ADJUSTED", lc) %in% varNames) {
-        ## leave some code in case we get a newer scale
         if (1 == length(grep("ITS-90", ncdf4::ncatt_get(file, maybeLC("TEMP_ADJUSTED", lc), "long_name")$value, ignore.case=TRUE)))
             res@metadata$units$temperatureAdjusted <- list(unit=expression(degree *C), scale="ITS-90")
         else res@metadata$units$temperatureAdjusted <- list(unit=expression(degree *C), scale="ITS-90")
     }
     if (maybeLC("TEMP_ADJUSTED_ERROR", lc) %in% varNames) {
-        ## leave some code in case we get a newer scale
         if (1 == length(grep("ITS-90", ncdf4::ncatt_get(file, maybeLC("TEMP_ADJUSTED_ERROR", lc), "long_name")$value, ignore.case=TRUE)))
             res@metadata$units$temperatureAdjustedError <- list(unit=expression(degree *C), scale="ITS-90")
         else res@metadata$units$temperatureAdjustedError <- list(unit=expression(degree *C), scale="ITS-90")
     }
+
+    ## salinity: PSAL, PSAL_ADJUSTED, PSAL_ADJUSTED_ERROR
     if (maybeLC("PSAL", lc) %in% varNames) {
-        ## leave some code in case we get a newer scale
         if (1 == length(grep("PRACTICAL", ncdf4::ncatt_get(file, maybeLC("PSAL", lc), "long_name")$value, ignore.case=TRUE)))
             res@metadata$units$salinity <- list(unit=expression(), scale="PSS-78")
         else
             res@metadata$units$salinity <- list(unit=expression(), scale="PSS-78")
     }
     if (maybeLC("PSAL_ADJUSTED", lc) %in% varNames) {
-        ## leave some code in case we get a newer scale
         if (1 == length(grep("PRACTICAL", ncdf4::ncatt_get(file, maybeLC("PSAL_ADJUSTED", lc), "long_name")$value, ignore.case=TRUE)))
             res@metadata$units$salinityAdjusted <- list(unit=expression(), scale="PSS-78")
         else
             res@metadata$units$salinityAdjusted <- list(unit=expression(), scale="PSS-78")
     }
     if (maybeLC("PSAL_ADJUSTED_ERROR", lc) %in% varNames) {
-        ## leave some code in case we get a newer scale
         if (1 == length(grep(maybeLC("PRACTICAL", lc), ncdf4::ncatt_get(file, maybeLC("PSAL_ADJUSTED_ERROR", lc), "long_name")$value, ignore.case=TRUE)))
             res@metadata$units$salinityAdjustedError <- list(unit=expression(), scale="PSS-78")
         else
             res@metadata$units$salinityAdjustedError <- list(unit=expression(), scale="PSS-78")
     }
+
+    ## pressure: PRES, PRES_ADJUSTED, PRES_ADJUSTED_ERROR
     if (maybeLC("PRES", lc) %in% varNames) {
         if (1 == length(grep("decibar", ncdf4::ncatt_get(file, maybeLC("PRES", lc), "units")$value, ignore.case=TRUE)))
             res@metadata$units$pressure <- list(unit=expression(dbar), scale="")
@@ -1273,43 +1463,46 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
         else
             res@metadata$units$pressureAdjustedError<- list(unit=expression(dbar), scale="")
     }
+
     ## Fix up names of flags. This became required with changes made to argoNames2oceNames() in Dec 17-18, 2016. Arguably, I
     ## should find out why the change occurred, but fixing the names now is just as easy, and might be clearer to the reader.
     names(res@metadata$flags) <- gsub("QC$", "", names(res@metadata$flags))
 
     ## Now, work through the columnar data. Note how we remove entries from varNames again,
     ## after having interrupted that practice whilst finding units and flags.
-    oceDebug(debug-1, "About to process stationParameters ...\n")
+    oceDebug(debug, "About to process stationParameters: c(\"",
+            paste(stationParameters, collapse="\",\""), "\")\n", sep="")
     for (item in stationParameters) {
         if (!nchar(item)) ## some files have unnamed variables, so we skip them
             next
         n <- item
         d <- getData(file, maybeLC(n, lc))
         varNames <- varNamesOmit(varNames, n)
-        oceDebug(debug, n, "\n")
-        oceDebug(debug, "varNames=", paste(varNames, collapse=","), "\n")
         if (!is.null(d)) {
+            oceDebug(debug, "Storing \"", n, "\" as \"", argoNames2oceNames(n), "\" in the data slot.\n", sep="")
             res@data[[argoNames2oceNames(n)]] <- d
             res@metadata$dataNamesOriginal[[argoNames2oceNames(n)]] <- n
         } else {
+            oceDebug(debug, "Set item = \"", n, "\" in data slot to NULL, since the data file contains no data for this.\n", sep="")
             res@data[[argoNames2oceNames(n)]] <- NULL
         }
+        oceDebug(debug-1, "Remaining ", length(varNames), "are: =", paste(varNames, collapse=" "), "\n")
 
         n <- paste(item, maybeLC("_QC", lc), sep="")
-        oceDebug(debug, "about to try to get '", n, "' from netcdf file\n", sep="")
+        oceDebug(debug-2, "about to try to get '", n, "' from netcdf file\n", sep="")
         ##if (n == "PRES_QC") browser()
         d <- getData(file, maybeLC(n, lc), quiet=TRUE)
-        oceDebug(debug, "... got it\n", sep="")
+        oceDebug(debug-2, "... got it\n", sep="")
         varNames <- varNamesOmit(varNames, n)
         oceDebug(debug-1, n, "\n")
-        oceDebug(debug-1, "B varNames=", paste(varNames, collapse=","), "\n")
+        oceDebug(debug-1, "B varNames=", paste(sort(varNames), collapse=","), "\n")
         if (!is.null(d)) res@metadata$flags[[argoNames2oceNames(n)]] <- argoDecodeFlags(d)
         n <- paste(item, maybeLC("_ADJUSTED", lc), sep="")
         if (n %in% varNames) {
             d <- getData(file, maybeLC(n, lc))
             varNames <- varNamesOmit(varNames, n)
             oceDebug(debug-1, n, "\n")
-            oceDebug(debug-1, "C varNames=", paste(varNames, collapse=","), "\n")
+            oceDebug(debug-1, "C varNames=", paste(sort(varNames), collapse=","), "\n")
             if (!is.null(d)) {
                 res@data[[argoNames2oceNames(n)]] <- d
                 res@metadata$dataNamesOriginal[[argoNames2oceNames(n)]] <- n
@@ -1322,7 +1515,7 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
             d <- getData(file, maybeLC(n, lc))
             varNames <- varNamesOmit(varNames, n)
             oceDebug(debug-1, n, "\n")
-            oceDebug(debug-1, "D varNames=", paste(varNames, collapse=","), "\n")
+            oceDebug(debug-1, "D varNames=", paste(sort(varNames), collapse=","), "\n")
             if (!is.null(d)) res@metadata$flags[[argoNames2oceNames(n)]] <- argoDecodeFlags(d)
         }
         n <- paste(item, maybeLC("_ADJUSTED_ERROR", lc), sep="")
@@ -1330,7 +1523,7 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
             d <- getData(file, maybeLC(n, lc))
             varNames <- varNamesOmit(varNames, n)
             oceDebug(debug-1, n, "\n")
-            oceDebug(debug-1, "E varNames=", paste(varNames, collapse=","), "\n")
+            oceDebug(debug-1, "E varNames=", paste(sort(varNames), collapse=","), "\n")
             if (!is.null(d)) {
                 res@data[[argoNames2oceNames(n)]] <- d
                 res@metadata$dataNamesOriginal[[argoNames2oceNames(n)]] <- n
@@ -1339,13 +1532,15 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
             }
         }
     }
-    oceDebug(debug-1, "after processing stationParameters, flag names are: ",
-             paste(names(res@metadata$flags), collapse=" "), "\n")
+    oceDebug(debug, "After processing stationParameters, flag names are: c(\"",
+             paste(names(res@metadata$flags), collapse="\",\""), "\").\n", sep="")
     if (length(res@metadata$flags))
         names(res@metadata$flags) <- gsub("QC$", "", names(res@metadata$flags))
-    oceDebug(debug-1, "after trimming QC, flag names are: ",
-             paste(names(res@metadata$flags), collapse=" "), "\n")
+    oceDebug(debug, "After trimming QC, flag names are: c(\"",
+             paste(names(res@metadata$flags), collapse="\",\""), "\")\n", sep="")
     res@metadata$filename <- filename
+
+    #cat("@L1391 varnames: ", paste(sort(varNames), sep=" "), "\n")
 
     ## Now, insert any unprocessed items from varNames into metadata. We
     ## need to check for access failures because we get the error
@@ -1357,7 +1552,8 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
     ## "HISTORY_START_PRES", "HISTORY_STOP_PRES",
     ## "HISTORY_PREVIOUS_VALUE", "HISTORY_QCTEST"
     for (name in varNames) {
-        oceDebug(debug, "about to try to insert \"", name, "\" into metadata\n", sep="")
+        ocename <- snakeToCamel(name, specialCases=c("QC"))
+        oceDebug(debug, "Inserting \"", name, "\" as \"", ocename, "\" in the metadata slot.\n", sep="")
         value <- NA
         o <- capture.output(
                             {
@@ -1385,16 +1581,12 @@ read.argo <- function(file, debug=getOption("oceDebug"), processingLog, ...)
             ## Trim leading/trailing whitespace, if it is a string
             if (is.character(value))
                 value <- trimString(value)
-            res@metadata[[name]] <- value
+            res@metadata[[ocename]] <- value
         }
     }
-
     ## Record a log item
-    res@processingLog <- if (is.character(file))
-        processingLogAppend(res@processingLog, paste("read.argo(\"", file, "\")", sep=""))
-    else processingLogAppend(res@processingLog, paste(deparse(match.call()), sep="", collapse=""))
-    res <- initializeFlagScheme(res, "argo")
-    oceDebug(debug, "} # read.argo()\n", sep="", unindent=1)
+    res@processingLog <- processingLogAppend(res@processingLog, paste("read.argo(file=\"", filename, "\")", sep=""))
+    oceDebug(debug, "} # read.argo()\n", sep="", unindent=1, style="bold")
     res
 }
 
@@ -1534,9 +1726,7 @@ as.argo <- function(time, longitude, latitude,
 #' of two projections is used: stereopolar (i.e. `"+proj=stere +lon_0=X"`
 #' where `X` is the mean longitude), or Mercator (i.e. `"+proj=merc"`)
 #' otherwise.  Otherwise, `projection` must be a character string specifying
-#' a projection in the notation used by the [rgdal::project] function
-#' in the \CRANpkg{rgdal} package; this will be familiar to many readers as
-#' the PROJ.4 notation; see [mapPlot()].
+#' a projection in the notation used by [oceProject()] and [mapPlot()].
 #'
 #' @param mar value to be used with `par('mar')`.
 #'
@@ -1566,8 +1756,6 @@ as.argo <- function(time, longitude, latitude,
 #' # of handleFlags(), to skip over questionable data.
 #' plot(handleFlags(argo), which=c(1, 4, 6, 5))
 #'
-#' @references \url{http://www.argo.ucsd.edu/}
-#'
 #' @author Dan Kelley
 #'
 #' @family things related to argo data
@@ -1587,8 +1775,6 @@ setMethod(f="plot",
           {
               if (!inherits(x, "argo"))
                   stop("method is only for objects of class '", "argo", "'")
-              if ("adorn" %in% names(list(...)))
-                  warning("In plot,argo-method() : the 'adorn' argument was removed in November 2017", call.=FALSE)
               oceDebug(debug, "plot.argo(x, which=c(", paste(which, collapse=","), "),",
                       argShow(mgp),
                       argShow(mar),
@@ -1596,11 +1782,9 @@ setMethod(f="plot",
                       " ...) {\n", sep="", unindent=1, style="bold")
               coastline <- match.arg(coastline)
               nw  <- length(which)
-              if (nw > 1) {
-                  par(mfcol=c(1, nw), mgp=mgp, mar=mar)
-              } else {
-                  par(mgp=mgp, mar=mar)
-              }
+              if (nw > 1)
+                  par(mfcol=c(1, nw))
+              par(mgp=mgp, mar=mar)
               if (missing(level) || level == "all")
                   level <- seq(1L, dim(x@data$temperature)[1])
               longitude <- x[["longitude"]]
@@ -1644,7 +1828,8 @@ setMethod(f="plot",
               }
               for (w in 1:nw) {
                   if (which[w] == 1) {
-                      oceDebug(debug, "which[", w, "] ==1, so plotting a map\n")
+                      oceDebug(debug, "which[", w, "] == 1, so plotting a map\n")
+                      oceDebug(debug, "note: par(\"mfrow\") = ", paste(par("mfrow"), collapse=","), "\n")
                       ## map
                       ## FIXME: coastline selection should be DRY
                       haveCoastline <- FALSE
@@ -1688,6 +1873,7 @@ setMethod(f="plot",
                       ## if (!is.character(coastline)) stop("coastline must be a character string")
 
                       if (!is.null(projection)) {
+                          oceDebug(debug, "drawing an argo map with a projection\n")
                           meanlat <- mean(x[['latitude']], na.rm=TRUE)
                           meanlon <- mean(x[['longitude']], na.rm=TRUE)
                           ## id <- pmatch(projection, "automatic")
@@ -1713,6 +1899,7 @@ setMethod(f="plot",
                               }
                           }
                       } else {
+                          oceDebug(debug, "drawing an argo map without a projection\n")
                           asp <- 1 / cos(mean(range(x@data$latitude, na.rm=TRUE)) * atan2(1, 1) / 45)
                           plot(x@data$longitude, x@data$latitude, asp=asp,
                                type=type, cex=cex, pch=pch,
@@ -1793,7 +1980,7 @@ setMethod(f="plot",
                   }
               }
               oceDebug(debug, "} # plot.argo()\n", unindent=1, style="bold")
-              invisible()
+              invisible(NULL)
           })
 
 ## DEVELOPERS: please pattern functions and documentation on the 'ctd' code, for uniformity.
@@ -1806,23 +1993,18 @@ setMethod(f="plot",
 #' @template handleFlagsTemplate
 #'
 #' @references
-#' 1. \url{http://www.argo.ucsd.edu/Argo_date_guide.html#dmodedata}
+#' 1. Wong, Annie, Robert Keeley, Thierry Carval, and Argo Data Management Team.
+#' "Argo Quality Control Manual for CTD and Trajectory Data," January 1, 2020.
+#' \url{https://archimer.ifremer.fr/doc/00228/33951/}.
 #'
 #' @examples
 #' library(oce)
 #' data(argo)
-#' # 1. Default: set to NA any data that is not flagged with
-#' # code value 1 (meaning `"passed_all_tests"`)
-#' argoNew <- handleFlags(argo, flags=c(0, 2:9))
+#' argoNew <- handleFlags(argo)
 #' # Demonstrate replacement, looking at the second profile
-#' f <- argo[["salinityFlag"]][,2] # first column with a flag=4 entry
+#' f <- argo[["salinityFlag"]][,2]
 #' df <- data.frame(flag=f, orig=argo[["salinity"]][,2], new=argoNew[["salinity"]][,2])
 #' df[11:15,] # notice line 13
-#'
-#' # 2. A less restrictive case: focussing just on salinity,
-#' # retain only data with flags 1 (meaning `"passed_all_tests"`)
-#' # and 2 (`"probably_good"`).
-#' argoNew <- handleFlags(argo, flags=list(salinity=c(0, 3:9)))
 #'
 #' @author Dan Kelley
 #'
@@ -1844,3 +2026,149 @@ setMethod("handleFlags", signature=c(object="argo", flags="ANY", actions="ANY", 
                   stop("names of flags and actions must match")
               handleFlagsInternal(object=object, flags=flags, actions=actions, where=where, debug=debug)
           })
+
+
+#' Set Preference for Adjusted Values
+#'
+#' [argo-class] data can contain "adjusted" forms of data items,
+#' which may be more trustworthy than the original
+#' data, and `preferAdjusted` lets the user express a preference
+#' for such adjusted data.  This means that using
+#' \code{\link{[[,argo-method}} on the results returned by `preferAdjusted`
+#' will (if possible) return adjusted data, and also use those adjusted
+#' data in computations of derived quantities such as Absolute Salinity.
+#' The preference applies also to units and to data-quality flags,
+#' both of which can be returned by \code{\link{[[,argo-method}}, as
+#' discussed in \dQuote{Details}.
+#'
+#' `preferAdjusted()` merely sets two items in the `metadata` slot of the
+#' returned [argo-class] object. The real action is carried out by
+#' \code{\link{[[,argo-method}} but, for convenience, the details are explained here.
+#'
+#' Consider salinity, for example.
+#' If `which` equals `"all"`, or if it is a character
+#' vector containing `"salinity"`, then using
+#' \code{\link{[[,argo-method}} on the returned object
+#' will yield the adjusted forms of the salinity data,
+#' its associated flags, or its units.  Thus, in the salinity
+#' case,
+#' * `argo[["salinity"]]` will attempt to return `argo@data$salinityAdjusted`
+#' instead of returning `argo@data$salinity`, although if the adjusted values
+#' are all `NA` then, depending on the value of `fallback`, the
+#' unadjusted values may be returned; similarly
+#' * `argo[["salinityFlags"]]` will attempt to return
+#' `argo@metadata$flags$salinityAdjusted`
+#' instead of `argo@metadata$flags$salinity`, and
+#' * `argo[["salinityUnits"]]` will attempt to return
+#' `argo@metadata$units$salinityAdjusted`
+#' instead of `argo@metadata$units$salinity`.
+#'
+#' The default value, `which="all"`, indicates that this
+#' preference for adjusted values will apply to all the
+#' elements of the `data` slot of the returned object, along
+#' with associated flags and units. This can be handy for quick
+#' work, but analysts may also choose to restrict their use of
+#' adjusted values to a subset of variables, based on their own
+#' decisions about data quality or accuracy.
+#'
+#' The default value `fallback=TRUE` indicates that later calls to
+#' \code{\link{[[,argo-method}} should return unadjusted values for any
+#' data items that have `NA` for all the adjusted values.  This
+#' condition is rare for core variables (salinity, temperature and
+#' pressure) but is annoyingly common for biogeochemical variables; see
+#' e.g. Section 2.2.5 of Reference 1 for a discussion of
+#' the conditions under which Argo netcdf files contain
+#' adjusted values. Setting `fallback=FALSE` means that adjusted
+#' values (if they exist) will always be returned, even if they
+#' are a useless collection of `NA` values.
+#'
+#' Error fields, such as `salinityAdjustedError`, are returned
+#' as-is by \code{\link{[[,argo-method}}, regardless of whether
+#' the object was created by `preferAdjusted`.
+#'
+#' It should be noted that, regardless of whether `preferAdjusted`
+#' has been used, the analyst can always access either unadjusted
+#' or adjusted data directly, using the original variable names stored
+#' in the source netcdf file.  For example, `argo[["PSAL"]]`
+#' yields unadjusted salinity values, and
+#' `argo[["PSAL_ADJUSTED"]]` yields adjusted values (if they exist, or
+#' `NULL` if they do not).
+#' Similarly, adjusted value can always be obtained by using a form
+#' like `argo[["salinityAdjusted"]]`.
+#'
+#' @param argo An [argo-class] object.
+#'
+#' @param which A character vector naming the items for which
+#' (depending also on the value of `fallback`) adjusted values
+#' are to be sought by future calls to \code{\link{[[,argo-method}}.
+#' The short names are used, e.g. `which="oxygen"` means that
+#' adjusted oxygen is to be returned in future calls
+#' such as `argo[["oxygen"]]`.  The default,
+#' `"all"`, means to  use adjusted values for any item in `argo`
+#' that has adjusted values.
+#'
+#' @param fallback A logical value indicating whether to fall back
+#' to unadjusted values for any data field in which the
+#' adjusted values are all `NA`.  The default value, `TRUE`,
+#' avoids a problem with biogeochemical fields, where adjustment
+#' of any one field may lead to insertion of "adjusted" values for
+#' other fields that consist of nothing more than `NA`s.
+#'
+#' @return An [argo-class] object its `metadata` slot altered
+#' (in its `adjustedWhich` and `adjustedFallback` elements)
+#' as a signal for how \code{\link{[[,argo-method}} should
+#' function on the object.
+#'
+#' @examples
+#' library(oce)
+#' data(argo)
+#' argoAdjusted <- preferAdjusted(argo)
+#' all.equal(argo[["salinityAdjusted"]], argoAdjusted[["salinity"]])
+#' all.equal(argo[["salinityFlagsAdjusted"]], argoAdjusted[["salinityFlags"]])
+#' all.equal(argo[["salinityUnitsAdjusted"]], argoAdjusted[["salinityUnits"]])
+#'
+#' @references
+#' 1. Argo Data Management Team. "Argo User's Manual V3.3." Ifremer,
+#' November 28, 2019.
+#' \doi{10.13155/29825}
+#'
+#' @author Dan Kelley, based on discussions with Jaimie Harbin (with
+#' respect to the \code{\link{[[,argo-method}} interface) and Clark Richards
+#' (with respect to storing the preference in the `metadata` slot).
+preferAdjusted <- function(argo, which="all", fallback=TRUE)
+{
+    if (!inherits(argo, "argo"))
+        stop("'argo' must be an oce 'argo' object")
+    if (!is.logical(fallback))
+        stop("fallback must be a logical value")
+    argo@metadata$adjustedFallback <- fallback
+    argo@metadata$adjustedWhich <- which
+    argo
+}
+
+#' Convert time to Argo Julian Day (juld)
+#'
+#' This converts a POSIXct time into an Argo julian day, with the convention
+#' that juld=0 at 1950-01-01.
+#'
+#' @param t A POSIXct time or a string that can be converted to a POSIXct time
+#'
+#' @examples
+#' timeToArgoJuld("2020-07-01")
+#'
+#' @author Jaimie Harbin and Dan Kelley
+timeToArgoJuld <- function(t)
+    oce::julianDay(as.POSIXct(t, tz='UTC')) - oce::julianDay(as.POSIXct("1950-01-01", tz="UTC"))
+
+#' Convert Argo Julian Day (juld) to time
+#'
+#' @param jday A numerical value indicating the julian day in the Argo convention,
+#' with day=0 at 1950-01-01.
+#'
+#' @examples
+#' argoJuldToTime(25749)
+#'
+#' @author Jaimie Harbin and Dan Kelley
+argoJuldToTime <- function(jday)
+    as.POSIXct("1950-01-01", tz="UTC") + jday*86400
+

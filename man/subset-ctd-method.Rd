@@ -2,7 +2,7 @@
 % Please edit documentation in R/ctd.R
 \name{subset,ctd-method}
 \alias{subset,ctd-method}
-\title{Subset a CTD Object}
+\title{Subset a ctd Object}
 \usage{
 \S4method{subset}{ctd}(x, subset, ...)
 }
@@ -22,7 +22,7 @@ Return a subset of a \linkS4class{ctd} object.
 }
 \details{
 This function is used to subset data within
-a ctd object. There are two ways of working. If
+a \linkS4class{ctd} object. There are two ways of working. If
 \code{subset} is supplied, then it is a logical expression
 that is evaluated within the environment of the \code{data}
 slot of the object (see Example 1). Alternatively, if the
@@ -67,6 +67,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

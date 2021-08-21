@@ -91,7 +91,7 @@ setMethod(f="summary",
                       nt <- length(time)
                       deltat <- mean(diff(as.numeric(time)), na.rm=TRUE)
                       if (is.na(deltat)) {
-                          cat("* Time:               ", format(from), "\n")
+                          cat("* Time:                ", format(from), "\n", sep="")
                       } else {
                           if (deltat < 60) {
                               cat("* Time ranges from", format(from), "to", format(to), "with", nt, "samples and mean increment", deltat, "s\n")
@@ -218,18 +218,24 @@ setMethod(f="summary",
                       cat("\n")
                   }
               }
+              ## Flag scheme (may exist even if no flags are set)
+              if (!is.null(object@metadata$flagScheme)) {
+                  cat("* Data-quality Flag Scheme\n\n")
+                  cat("    name    \"", object@metadata$flagScheme$name, "\"\n", sep="")
+                  cat("    mapping ", gsub(" = ", "=", as.character(deparse(object@metadata$flagScheme$mapping,
+                                                                            width.cutoff=400))), "\n", sep="")
+                  if ("default" %in% names(object@metadata$flagScheme)) {
+                      cat("    default ", gsub(" = ", "=", as.character(deparse(object@metadata$flagScheme$default,
+                                                                                width.cutoff=400))), "\n", sep="")
+                  }
+                  cat("\n")
+              }
               ## Get flags specifically from metadata; using [["flags"]] could extract
               ## it from data, if present there and not in metadata (as e.g. with
               ## the data("ctd") that is provided with oce).
               flags <- object@metadata$flags
               if (length(flags)) {
-                  if (!is.null(object@metadata$flagScheme)) {
-                      cat("* Data-quality Flag Scheme\n\n")
-                      cat("    name    \"", object@metadata$flagScheme$name, "\"\n", sep="")
-                      cat("    mapping ", gsub(" = ", "=", as.character(deparse(object@metadata$flagScheme$mapping,
-                                                                                   width.cutoff=400))), "\n\n", sep="")
-                  }
-                  cat("* Data-quality Flags\n\n")
+                 cat("* Data-quality Flags\n\n")
                   if (length(names(flags))) {
                       width <- 1 + max(nchar(names(flags)))
                       for (name in names(flags)) {
@@ -264,7 +270,7 @@ setMethod(f="summary",
                   cat("\n")
               }
               processingLogShow(object)
-              invisible()
+              invisible(NULL)
           })
 
 
@@ -341,7 +347,7 @@ setMethod(f="subset",
           definition=function(x, subset, ...) {
               if (missing(subset))
                   stop("must give 'subset'")
-              keep <- eval(substitute(subset), x@data, parent.frame())
+              keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame())
               ##message("percent keep ", round(sum(keep)/length(keep)*100, 2), "%")
               res <- x
               for (i in seq_along(x@data))
@@ -400,16 +406,16 @@ setMethod(f="[[",
                   return(x@data)
               } else if (i == "processingLog") {
                   return(x@processingLog)
-              } else if (length(grep("Unit$", i))) {
+              } else if (grepl("Unit$", i)) {
                   ## returns a list
                   return(if ("units" %in% names(x@metadata)) x@metadata$units[[gsub("Unit$", "", i)]] else x@metadata[[i]])
-              } else if (length(grep(" unit$", i))) {
+              } else if (grepl(" unit$", i)) {
                   ## returns just the unit, an expression
                   return(if ("units" %in% names(x@metadata)) x@metadata$units[[gsub(" unit$", "", i)]][[1]] else "")
-              } else if (length(grep(" scale$", i))) {
+              } else if (grepl(" scale$", i)) {
                   ## returns just the scale, a character string
                   return(if ("units" %in% names(x@metadata)) as.character(x@metadata$units[[gsub(" scale$", "", i)]][[2]]) else "")
-              } else if (length(grep("Flag$", i))) {
+              } else if (grepl("Flag$", i)) {
                   ## returns a list
                   return(if ("flags" %in% names(x@metadata)) x@metadata$flags[[gsub("Flag$", "", i)]] else NULL)
               } else if (i == "sigmaTheta") {
@@ -418,6 +424,15 @@ setMethod(f="[[",
                   return(swSigma0(x))
               } else if (i == "spice") {
                   return(swSpice(x))
+              } else if (i == "temperature") {
+                  scale <- x@metadata$units[["temperature"]]$scale
+                  if (!is.null(scale) && "IPTS-48" == scale) {
+                      T90fromT48(x@data$temperature)
+                  } else if (!is.null(scale) && "IPTS-68" == scale) {
+                      T90fromT68(x@data$temperature)
+                  } else {
+                      x@data$temperature
+                  }
               } else {
                   ##DEBUG oceDebug(debug, "[[ at base level. i='", i, "'\n", sep="", unindent=1, style="bold")
                   if (missing(j) || j == "") {
@@ -486,11 +501,11 @@ setMethod(f="[[<-",
               } else if (i %in% names(x@metadata)) {
                   x@metadata[[i]] <- value
               } else {
-                  if (length(grep("Unit$", i))) {
+                  if (grepl("Unit$", i)) {
                       if (!("units" %in% names(x@metadata)))
                           x@metadata$units <- list()
                       x@metadata$units[[gsub("Unit$", "", i)]] <- value
-                  } else if (length(grep("Flag$", i))) {
+                  } else if (grepl("Flag$", i)) {
                       if (!("flags" %in% names(x@metadata)))
                           x@metadata$flags <- list()
                       x@metadata$flags[[gsub("Flag$", "", i)]] <- value
@@ -547,6 +562,8 @@ setMethod(f="show",
                       cat(class(object)[1], " object, from file '", filename, "', has nothing in its data slot.\n", sep="")
                   }
               }
+              odigits <- options("digits")$digits
+              options(digits=9) # helps with e.g. CTD adjusted vs unadjusted values
               for (i in seq_along(dataNames)) {
                   d <- object@data[[i]]
                   if (0 == length(d)) {
@@ -577,6 +594,7 @@ setMethod(f="show",
                       }
                   }
               }
+              options(digits=odigits) # return to original digits value
           })
 
 
@@ -845,7 +863,9 @@ handleFlagsInternal <- function(object, flags, actions, where, debug=0) {
 #' as listed below.
 #'
 #' * for `argo`, the default is
-#' `c(0,2,3,4,7,8,9)`, i.e. all flags except `passed_all_tests`.
+#' `c(0,3,4,6,7,9)`, meaning to act upon `not_assessed` (0), `probably_bad` (3),
+#' `bad` (4), `not_used_6` (6), `not_used_7` (7) and `missing` (9).  See Section
+#' 3.2.2 of Carval et al. (2019).
 #'
 #' * for `BODC`, the default is
 #' `c(0,2,3,4,5,6,7,8,9)`, i.e. all flags except `good`.
@@ -865,6 +885,12 @@ handleFlagsInternal <- function(object, flags, actions, where, debug=0) {
 #' `metadata` slot lacks a `flagScheme` as set by [initializeFlagScheme()],
 #' or if it has a scheme that is not in the list provide in \dQuote{Description}.
 #'
+#' @references
+#'
+#' * Carval, Thierry, Bob Keeley, Yasushi Takatsuki, Takashi Yoshida, Stephen Loch Loch,
+#' Claudia Schmid, and Roger Goldsmith. Argo User's Manual V3.3. Ifremer, 2019.
+#' \doi{10.13155/29825}
+#'
 #' @family functions relating to data-quality flags
 defaultFlags <- function(object)
 {
@@ -877,7 +903,7 @@ defaultFlags <- function(object)
     if (is.null(scheme))
         return(NULL)
     if (scheme == "argo")
-        return(c(0, 2, 3, 4, 7, 8, 9)) # retain passed_all_tests
+        return(c(0, 3, 4, 6, 7, 9)) # prior to 2020-june-11, was c(0, 2, 3, 4, 7, 8, 9)
     if (scheme == "BODC")
         return(c(0, 2, 3, 4, 5, 6, 7, 8, 9)) # retain good
     if (scheme == "DFO")
@@ -1037,7 +1063,7 @@ initializeFlagsInternal <- function(object, name=NULL, value=NULL, debug=getOpti
 #' @templateVar details There are no pre-defined `scheme`s for this object class.
 #'
 #' @template initializeFlagSchemeTemplate
-setGeneric("initializeFlagScheme", function(object, name=NULL, mapping=NULL, default=NULL, debug=0) {
+setGeneric("initializeFlagScheme", function(object, name=NULL, mapping=NULL, default=NULL, update=NULL, debug=0) {
            standardGeneric("initializeFlagScheme")
          })
 
@@ -1047,21 +1073,21 @@ setGeneric("initializeFlagScheme", function(object, name=NULL, mapping=NULL, def
 #'
 #' @template initializeFlagSchemeTemplate
 setMethod("initializeFlagScheme",
-          signature=c(object="oce", name="ANY", mapping="ANY", default="ANY", debug="ANY"),
-          definition=function(object, name, mapping, default, debug) {
-              initializeFlagSchemeInternal(object, name, mapping, default, debug)
+          signature=c(object="oce", name="ANY", mapping="ANY", default="ANY", update="ANY", debug="ANY"),
+          definition=function(object, name, mapping, default, update, debug) {
+              initializeFlagSchemeInternal(object, name, mapping, default, update, debug)
           })
 
 #' @templateVar class oce
-#' @templateVar details This is a low-level internal function used by user-accessible functions.
+#' @templateVar details This is a low-level internal function used mainly by experts.
 #' @template initializeFlagSchemeTemplate
-initializeFlagSchemeInternal <- function(object, name=NULL, mapping=NULL, default=NULL, debug=0)
+initializeFlagSchemeInternal <- function(object, name=NULL, mapping=NULL, default=NULL, update=NULL, debug=0)
 {
     oceDebug(debug, "initializeFlagSchemeInternal(object, name=\"", name, "\", debug=", debug, ") {", sep="", unindent=1)
     if (is.null(name))
         stop("must supply 'name'")
     res <- object
-    if (!is.null(object@metadata$flagScheme)) {
+    if (!is.null(object@metadata$flagScheme) && !(is.logical(update) && update)) {
         warning("cannot alter a flagScheme that is already is place")
     } else {
         ## DEVELOPER NOTE: keep in synch with tests/testthat/test_flags.R and man-roxygen/initializeFlagScheme.R
@@ -1070,11 +1096,26 @@ initializeFlagSchemeInternal <- function(object, name=NULL, mapping=NULL, defaul
             if (!is.null(mapping))
                 stop("cannot redefine the mapping for existing scheme named \"", name, "\"")
             if (name == "argo") {
-                mapping <- list(not_assessed=0, passed_all_tests=1, probably_good=2,
-                                probably_bad=3, bad=4, averaged=7,
-                                interpolated=8, missing=9)
-                if (is.null(default))
-                    default <- c(0, 2, 3, 4, 7, 8, 9) # retain passed_all_tests
+                ## The argo mapping and default were changed in June 2020,
+                ## to accomodate new understanding of argo flags, developed
+                ## by Jaimie Harbin for the argoCanada/argoFloats project.  See
+                ## https://github.com/ArgoCanada/argoFloats/issues/133
+                ## https://github.com/dankelley/oce/issues/1705
+                mapping <- list(not_assessed=0,
+                                passed_all_tests=1,
+                                probably_good=2,
+                                probably_bad=3,
+                                bad=4,
+                                changed=5,
+                                not_used_6=6,
+                                not_used_7=7, # until 2020-jun-10, named 'averaged'
+                                estimated=8,  # until 2020-jun-10, named 'interpolated'
+                                missing=9)
+                if (is.null(default)) {
+                    ## until 2020-jun-10, next was more cautious, namely
+                    ## default <- c(0, 2, 3, 4, 7, 8, 9) # retain passed_all_tests
+                    default <- c(0, 3, 4, 9)
+                }
             } else  if (name == "BODC") {
                 mapping <- list(no_quality_control=0, good=1, probably_good=2,
                                 probably_bad=3, bad=4, changed=5, below_detection=6,
@@ -1106,7 +1147,7 @@ initializeFlagSchemeInternal <- function(object, name=NULL, mapping=NULL, defaul
             if (is.null(mapping))
                 stop("must supply 'mapping' for new scheme named \"", name, "\"")
         }
-        res@metadata$flagScheme <- list(name=name, mapping=mapping)
+        res@metadata$flagScheme <- list(name=name, mapping=mapping, default=default)
     }
     res@processingLog <- processingLogAppend(res@processingLog,
                                              paste("initializeFlagScheme(object, name=\"", name,
@@ -1114,7 +1155,7 @@ initializeFlagSchemeInternal <- function(object, name=NULL, mapping=NULL, defaul
                                                    gsub(" ", "", paste(as.character(deparse(mapping)),
                                                                                      sep="", collapse="")),
                                                    ")",
-                                                   ", default=c(", paste(default, collapse=","), ")",
+                                                   ", default=c(", paste(default, collapse=","), "))",
                                                    sep=""))
     oceDebug(debug, "} # initializeFlagSchemeInternal", sep="", unindent=1)
     res

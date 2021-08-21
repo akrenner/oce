@@ -42,7 +42,7 @@ setClass("sealevel", contains="oce")
 #' the western hemisphere.
 #'
 #' @references
-#' 1. Fisheries and Oceans Canada \url{http://www.meds-sdmm.dfo-mpo.gc.ca/isdm-gdsi/index-eng.html}
+#' 1. Fisheries and Oceans Canada \code{http://www.meds-sdmm.dfo-mpo.gc.ca/isdm-gdsi/index-eng.html}
 #'
 #' @family datasets provided with oce
 #' @family things related to sealevel data
@@ -188,12 +188,12 @@ setMethod(f="subset",
               res@metadata <- x@metadata
               res@processingLog <- x@processingLog
               for (i in seq_along(x@data)) {
-                  r <- eval(substitute(subset), x@data, parent.frame(2))
+                  r <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
                   r <- r & !is.na(r)
                   res@data[[i]] <- x@data[[i]][r]
               }
               names(res@data) <- names(x@data)
-              subsetString <- paste(deparse(substitute(subset)), collapse=" ")
+              subsetString <- paste(deparse(substitute(expr=subset, env=environment())), collapse=" ")
               res@processingLog <- processingLogAppend(res@processingLog, paste("subset.sealevel(x, subset=", subsetString, ")", sep=""))
               res
           })
@@ -430,10 +430,8 @@ as.sealevel <- function(elevation,
 #' @references The example refers to Hurricane Juan, which caused a great deal
 #' of damage to Halifax in 2003.  Since this was in the era of the digital
 #' photo, a casual web search will uncover some spectacular images of damage,
-#' from both wind and storm surge. A map of the path of Hurricane Juan across
-#' Nova Scotia is at
-#' \url{http://ec.gc.ca/ouragans-hurricanes/default.asp?lang=En&n=222F51F7-1}.
-#' Landfall, very near the site of this sealevel
+#' from both wind and storm surge.
+#' Landfall, within 30km of this sealevel
 #' gauge, was between 00:10 and 00:20 Halifax local time on Monday, Sept 29,
 #' 2003.
 #'
@@ -460,8 +458,6 @@ setMethod(f="plot",
                               ...)
           {
               oceDebug(debug, "plot.sealevel(..., mar=c(", paste(mar, collapse=", "), "), ...) {\n", sep="", unindent=1)
-              if ("adorn" %in% names(list(...)))
-                  warning("In plot,adv-method() : the 'adorn' argument was removed in November 2017", call.=FALSE)
               ##> dots <- list(...)
               titlePlot<-function(x)
               {
@@ -629,7 +625,7 @@ setMethod(f="plot",
                   }
               }
               oceDebug(debug, "} # plot.sealevel()\n", unindent=1)
-              invisible()
+              invisible(NULL)
           })
 
 
@@ -660,7 +656,7 @@ setMethod(f="plot",
 #' Web searches did not uncover documentation on this format, so the
 #' decoding scheme was developed solely through examination of
 #' data files, which means that it might be not be correct.
-#' The MEDS repository (\url{http://www.isdm-gdsi.gc.ca/isdm-gdsi/index-eng.html})
+#' The MEDS repository (\code{http://www.isdm-gdsi.gc.ca/isdm-gdsi/index-eng.html})
 #' provides Type 2 data.
 #'
 #' @param file a connection or a character string giving the name of the file

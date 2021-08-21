@@ -169,12 +169,12 @@ setMethod(f="subset",
               res@metadata <- x@metadata
               res@processingLog <- x@processingLog
               for (i in seq_along(x@data)) {
-                  r <- eval(substitute(subset), x@data, parent.frame(2))
+                  r <- eval(substitute(expr=subset, env=environment()), x@data, parent.frame(2))
                   r <- r & !is.na(r)
                   res@data[[i]] <- x@data[[i]][r]
               }
               names(res@data) <- names(x@data)
-              subsetString <- paste(deparse(substitute(subset)), collapse=" ")
+              subsetString <- paste(deparse(substitute(expr=subset, env=environment())), collapse=" ")
               res@processingLog <- processingLogAppend(res@processingLog, paste("subset.met(x, subset=", subsetString, ")", sep=""))
               res
           })
@@ -214,7 +214,7 @@ setMethod(f="subset",
 #' to download and install from GitHub.
 #'
 #' 2. Environment Canada website for Historical Climate Data
-#' \url{http://climate.weather.gc.ca/index_e.html}
+#' `https://climate.weather.gc.ca/index_e.html`
 #'
 #' @family things related to met data
 as.met <- function(time, temperature, pressure, u, v, filename="(constructed from data)")
@@ -287,15 +287,10 @@ as.met <- function(time, temperature, pressure, u, v, filename="(constructed fro
 #' Data are downloaded from the Environment Canada's historical data
 #' website and cached locally.
 #'
-#' The data are downloaded from
-#' \url{https://climate.weather.gc.ca/historical_data/search_historic_data_e.html}
-#' using [utils::download.file()]
-#' pointed to the Environment Canada website (reference 1)
-#' using queries that had to be devised by reverse-engineering, since the agency
-#' does not provide documentation about how to construct queries. Caution: the
-#' query format changes from time to time, so [download.met()] may work one
-#' day, and fail the next.
-#'
+#' The data are downloaded
+#' using [utils::download.file()] based on a query devised by reverse-engineering
+#' queries create by the Environment Canada interface
+#' `https://climate.weather.gc.ca/historical_data/search_historic_data_e.html`.
 #' The constructed query contains Station ID, as provided in the `id` argument.
 #' Note that this seems to be a creation of Environment Canada, alone;
 #' it is distinct from the more standard "Climate ID" and "WMO ID".
@@ -361,7 +356,7 @@ as.met <- function(time, temperature, pressure, u, v, filename="(constructed fro
 #'
 #' @references
 #' 1. Environment Canada website for Historical Climate Data
-#' \url{http://climate.weather.gc.ca/index_e.html}
+#' `https://climate.weather.gc.ca/index_e.html`
 #'
 #' 2. Gavin Simpson's `canadaHCD` package on GitHub
 #' \url{https://github.com/gavinsimpson/canadaHCD}
@@ -467,7 +462,7 @@ metNames2oceNames <- function(names, scheme)
     res <- names
     if (!missing(scheme)) {
         if (scheme == "ODF") {
-            res <- ODFNames2oceNames(ODFnames=names, ODFunits=NULL)
+            res <- ODFNames2oceNames(ODFnames=names)
         } else if (scheme == "met") {
             ## next block handles monthly data
             res[grep("^Date.Time$", res)] <- "DateTime"
@@ -592,7 +587,7 @@ metNames2oceNames <- function(names, scheme)
 #'
 #' @references
 #' 1. Environment Canada website for Historical Climate Data
-#' \url{http://climate.weather.gc.ca/index_e.html}
+#' `https://climate.weather.gc.ca/index_e.html`
 #'
 #' @family things related to met data
 read.met <- function(file, type=NULL, skip=NULL, tz=getOption("oceTz"), debug=getOption("oceDebug"))
@@ -688,13 +683,13 @@ read.met.csv1 <- function(file, skip=NULL, tz=getOption("oceTz"), debug=getOptio
     options(warn=owarn)
     names <- names(rawData)
     ## FIXME: handle daily data, if the column names differ
-    if ("Day" %in% names && "Time" %in% names) {
+    time <- if ("Day" %in% names && "Time" %in% names) {
         ## hourly data
-        time <- strptime(paste(rawData$Year, rawData$Month, rawData$Day, rawData$Time),
-                         "%Y %m %d %H:%M", tz=tz)
+        as.POSIXct(strptime(paste(rawData$Year, rawData$Month, rawData$Day, rawData$Time),
+                            "%Y %m %d %H:%M", tz=tz))
     } else {
         ## monthly data
-        time <- ISOdatetime(rawData$Year, rawData$Month, 15, 0, 0, 0, tz="UTC")
+        ISOdatetime(rawData$Year, rawData$Month, 15, 0, 0, 0, tz="UTC")
     }
     ## deltat <- if ("Date.Time" %in% names) "monthly" else "hourly"
     ## print(data.frame(old=names, new=metNames2oceNames(names, "met")))

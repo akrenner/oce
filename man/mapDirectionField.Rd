@@ -17,9 +17,9 @@ mapDirectionField(
 )
 }
 \arguments{
-\item{longitude, latitude}{vectors of the starting points for arrows.}
+\item{longitude, latitude}{numeric vectors of the starting points for arrows.}
 
-\item{u, v}{components of a vector to be shown as a direction
+\item{u, v}{numeric vectors of the components of a vector to be shown as a direction
 field.}
 
 \item{scale}{latitude degrees per unit of \code{u} or \code{v}.}
@@ -47,12 +47,12 @@ output from a numerical model.  In another, \code{longitude} and
 vectors with lengths that match appropriately.
 }
 \examples{
-\donttest{
+\dontrun{
 library(oce)
 data(coastlineWorld)
 par(mar=rep(2, 4))
 mapPlot(coastlineWorld, longitudelim=c(-120,-55), latitudelim=c(35, 50),
-        proj="+proj=laea +lat0=40 +lat1=60 +lon_0=-110")
+        projection="+proj=laea +lat0=40 +lat1=60 +lon_0=-110")
 lon <- seq(-120, -60, 15)
 lat <- 45 + seq(-15, 15, 5)
 lonm <- matrix(expand.grid(lon, lat)[, 1], nrow=length(lon))

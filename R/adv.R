@@ -65,9 +65,9 @@ setClass("adv", contains="oce")
 #'
 #' # Spectrum of upward component of velocity, with ``turbulent'' reference line
 #' s <- spectrum(adv[["v"]][,3],plot=FALSE)
-#' plot(log10(s$freq), log10(s$spec), type='l')
+#' plot(log10(s$freq), log10(s$spec), type="l")
 #' for (a in seq(-20, 20, by=1))
-#'     abline(a=a, b=-5/3, col='gray', lty='dotted')
+#'     abline(a=a, b=-5/3, col="gray", lty="dotted")
 #'}
 #'
 #' @source This file came from the SLEIWEX-2008 experiment.
@@ -278,7 +278,7 @@ setMethod(f="[[<-",
 setMethod(f="subset",
           signature="adv",
           definition=function(x, subset, ...) {
-              subsetString <- paste(deparse(substitute(subset)), collapse=" ")
+              subsetString <- paste(deparse(substitute(expr=subset, env=environment())), collapse=" ")
               res <- x
               dots <- list(...)
               debug <- if (length(dots) && ("debug" %in% names(dots))) dots$debug else getOption("oceDebug")
@@ -289,7 +289,8 @@ setMethod(f="subset",
                   stop("must specify a 'subset'")
               if (length(grep("time", subsetString))) {
                   oceDebug(debug, "subsetting an adv object by time\n")
-                  keep <- eval(substitute(subset), x@data, parent.frame(2)) # used for $ts and $ma, but $tsSlow gets another
+                  ## keep <- eval(substitute(subset), x@data, parent.frame(2)) # used for $ts and $ma, but $tsSlow gets another
+                  keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
                   sum.keep <- sum(keep)
                   if (sum.keep < 2)
                       stop("must keep at least 2 profiles")
@@ -298,10 +299,11 @@ setMethod(f="subset",
                   res <- x
                   names <- names(x@data)
                   haveSlow <- "timeSlow" %in% names
-                  keep <- eval(substitute(subset), x@data, parent.frame(2)) # used for $ts and $ma, but $tsSlow gets another
+                  ##keep <- eval(substitute(subset), x@data, parent.frame(2)) # used for $ts and $ma, but $tsSlow gets another
+                  keep <- eval(expr=substitute(expr=subset, env=environment()), envir=x@data, enclos=parent.frame(2))
                   if (haveSlow) {
                       subsetStringSlow <- gsub("time", "timeSlow", subsetString)
-                      keepSlow <-eval(parse(text=subsetStringSlow), x@data, parent.frame(2))
+                      keepSlow <- eval(parse(text=subsetStringSlow), x@data, parent.frame(2))
                   }
                   if ("timeBurst" %in% names) {
                       subsetStringBurst <- gsub("time", "timeBurst", subsetString)
@@ -361,6 +363,8 @@ read.adv <- function(file, from=1, to, by=1, tz=getOption("oceTz"),
 {
     if (!missing(file) && is.character(file) && 0 == file.info(file)$size)
         stop("empty file")
+    if (!interactive())
+        monitor <- FALSE
     type <- match.arg(type)
     ## FIXME: all these read.adv variants should have the same argument list
     if (type == "nortek")
@@ -578,8 +582,6 @@ setMethod(f="plot",
                               ...)
           {
               debug <- min(4, max(0, round(debug)))
-              if ("adorn" %in% names(list(...)))
-                  warning("In plot,adv-method() : the 'adorn' argument was removed in November 2017", call.=FALSE)
               oceDebug(debug, "plot.adv(x, which=c(", paste(which, collapse=","), "), type=\"", type, "\", ...) {\n", sep="", unindent=1)
               have.brushCorrelation <- !missing(brushCorrelation)
               oceDebug(debug, "brushCorrelation", if (have.brushCorrelation) brushCorrelation else "not given", "\n")
@@ -1135,7 +1137,7 @@ setMethod(f="plot",
                   }
               }
               oceDebug(debug, "} # plot.adv()\n", unindent=1)
-              invisible()
+              invisible(NULL)
           })
 
 
@@ -1155,7 +1157,7 @@ setMethod(f="plot",
 #' [xyzToEnuAdv()].
 #'
 #' @references
-#' \url{https://www.nortekgroup.com/faq/how-is-a-coordinate-transformation-done}
+#' 1. @template nortekCoordTemplate
 #'
 #' @family things related to adv data
 toEnuAdv <- function(x, declination=0, debug=getOption("oceDebug"))
@@ -1203,7 +1205,8 @@ toEnuAdv <- function(x, declination=0, debug=getOption("oceDebug"))
 #' `"adv"` objects.
 #'
 #' @references
-#' \url{https://www.nortekgroup.com/faq/how-is-a-coordinate-transformation-done}
+#' 1. @template nortekCoordTemplate
+#'
 #' @family things related to adp data
 beamToXyzAdv <- function(x, debug=getOption("oceDebug"))
 {
@@ -1348,7 +1351,7 @@ beamToXyzAdv <- function(x, debug=getOption("oceDebug"))
 #' `adv` objects.
 #'
 #' @references
-#' 1. \url{https://www.nortekgroup.com/faq/how-is-a-coordinate-transformation-done}
+#' 1. @template nortekCoordTemplate
 #'
 #' 2. Clark Richards, 2012, PhD Dalhousie University Department of
 #' Oceanography.

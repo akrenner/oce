@@ -7,9 +7,9 @@
 mapCoordinateSystem(longitude, latitude, L = 100, phi = 0, ...)
 }
 \arguments{
-\item{longitude}{numeric value of longitude in degrees.}
+\item{longitude}{numeric vector of longitudes in degrees.}
 
-\item{latitude}{numeric value of latitude in degrees.}
+\item{latitude}{numeric vector of latitudes in degrees.}
 
 \item{L}{axis length in km.}
 
@@ -28,7 +28,7 @@ This is a preliminary version of this function. It only
 works if the lines of constant latitude are horizontal on the plot.
 }
 \examples{
-\donttest{
+\dontrun{
 library(oce)
 if (requireNamespace("ocedata", quietly=TRUE)) {
     data(coastlineWorldFine, package='ocedata')

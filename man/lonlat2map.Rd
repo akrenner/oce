@@ -7,15 +7,15 @@
 lonlat2map(longitude, latitude, projection = "", debug = getOption("oceDebug"))
 }
 \arguments{
-\item{longitude}{a vector containing decimal longitudes, or a list
+\item{longitude}{a numeric vector containing decimal longitudes, or a list
 containing items named \code{longitude} and \code{latitude}, in which case
 the indicated values are used, and next argument is ignored.}
 
-\item{latitude}{a vector containing decimal latitude (ignored if
+\item{latitude}{a numeric vector containing decimal latitude (ignored if
 \code{longitude} is a list, as described above).}
 
 \item{projection}{optional indication of projection.  This must be character
-string in the format used by the \CRANpkg{rgdal} package;
+string in the format used by the \CRANpkg{sf} package;
 see \code{\link[=mapPlot]{mapPlot()}}.)}
 
 \item{debug}{an integer specifying whether debugging information is
@@ -36,21 +36,12 @@ other arguments will be inferred by \code{lonlat2map}.  This is important
 because otherwise, if a new projection is called for, it will ruin any
 additions to the existing plot.
 }
-\section{Bugs}{
-
-This uses \CRANpkg{rgdal}, and will fail on i386/windows machines unless
-that package is version 1.3-9 or higher.
-}
-
 \examples{
-canProject <- .Platform$OS.type!="windows"&&requireNamespace("rgdal")
-if (canProject) {
-    library(oce)
-    ## Cape Split, in the Minas Basin of the Bay of Fundy
-    cs <- list(longitude=-64.49657, latitude=45.33462)
-    xy <- lonlat2map(cs, projection="+proj=merc")
-    map2lonlat(xy)
-}
+library(oce)
+## Cape Split, in the Minas Basin of the Bay of Fundy
+cs <- list(longitude=-64.49657, latitude=45.33462)
+xy <- lonlat2map(cs, projection="+proj=merc")
+map2lonlat(xy)
 
 }
 \seealso{

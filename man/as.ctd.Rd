@@ -33,7 +33,6 @@ as.ctd(
 \arguments{
 \item{salinity}{There are several distinct choices for \code{salinity}.
 \itemize{
-\item It can be an \linkS4class{rsk} object (see \dQuote{Converting rsk objects} for details).
 \item It can be a
 vector indicating the practical salinity through the water column. In that case,
 \code{as.ctd} employs the other arguments listed below.
@@ -47,15 +46,13 @@ matrix form (as can happen with some objects of \linkS4class{argo}),
 then only the first column is used, and a warning to that effect is given,
 unless the \code{profile} argument is specified and then that specific
 profile is extracted.
-\item It can be an \linkS4class{rsk} object (see \dQuote{Converting rsk objects} for details).
-\item It can be an \linkS4class{rsk} object (see \dQuote{Converting rsk objects} for details).
 \item It can be unspecified, in which case \code{conductivity} becomes a mandatory
 argument, because it will be needed for computing actual salinity,
 using \code{\link[=swSCTp]{swSCTp()}}.
 }}
 
-\item{temperature}{\emph{in-situ} temperature in \eqn{^\circ deg}C on
-the ITS-90 scale; see \dQuote{Temperature units} in the documentation for
+\item{temperature}{\emph{in-situ} temperature in \eqn{^\circ}{deg}C
+on the ITS-90 scale; see \dQuote{Temperature units} in the documentation for
 \code{\link[=swRho]{swRho()}}.}
 
 \item{pressure}{Vector of pressure values, one for each \code{salinity} and
@@ -72,7 +69,10 @@ divide by 42.914 to get conductivity ratio (see Culkin and Smith, 1980).}
 \item{time}{optional vector of times of observation}
 
 \item{other}{optional list of other data columns that are not in the standard
-list}
+list. Note that this argument is \strong{deprecated}, meaning that it
+will be removed soon. Please use \code{as.ctd()} to construct a \linkS4class{ctd}
+object, and then use \code{\link[=oceSetData]{oceSetData()}} later, to add other data,
+as needed.}
 
 \item{units}{an optional list containing units.  If not supplied,
 defaults are set for \code{pressure}, \code{temperature}, \code{salinity},
@@ -241,6 +241,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

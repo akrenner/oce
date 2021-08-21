@@ -2,7 +2,7 @@
 % Please edit documentation in R/ctd.R
 \name{[[,ctd-method}
 \alias{[[,ctd-method}
-\title{Extract Something From a CTD Object}
+\title{Extract Something From a ctd Object}
 \usage{
 \S4method{[[}{ctd}(x, i, j, ...)
 }
@@ -253,6 +253,7 @@ Other things related to ctd data:
 \code{\link{plotTS}()},
 \code{\link{read.ctd.itp}()},
 \code{\link{read.ctd.odf}()},
+\code{\link{read.ctd.odv}()},
 \code{\link{read.ctd.sbe}()},
 \code{\link{read.ctd.woce.other}()},
 \code{\link{read.ctd.woce}()},

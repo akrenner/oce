@@ -7,8 +7,8 @@ output:
     toc: true
     number_sections: true
     fig_caption: yes
-    fig_width: 5
-    fig_height: 5
+    fig_width: 3.5
+    fig_height: 3.5
     dpi: 72
     dev.args: list(pointsize=11)
 vignette: >
@@ -60,13 +60,11 @@ comparison with related measurements, etc.
 ## Flag conventions
 
 A frustrating aspect of oceanographic analysis is that different data archiving
-agencies employ different systems for flags. For example, the [World
-Hydrographic
-Programme](https://www.nodc.noaa.gov/woce/woce_v3/wocedata_1/whp/exchange/exchange_format_desc.htm)
-designates good bottle/CTD data with a flag value of 2, whereas the [World
-Ocean
-Database](https://data.nodc.noaa.gov/woa/WOD/CODES/TXT/Definition_of_Quality_Flags.txt)
-uses 0 for good data.
+agencies employ different systems for flags. For example, the World
+Hydrographic Programme designates good bottle/CTD data with a flag value of 2,
+whereas the World Ocean Database (which might be available at
+\code{https://www.ncei.noaa.gov/data/oceans/woa/WOD/CODES/TXT/Definition_of_Quality_Flags.txt},
+although that link failed when tested on 2021-06-26) uses 0 for good data.
 
 Analysts must be aware of the scheme used for a particular dataset.  It is also
 good to be on the lookout for particular values in data, because oceanographers

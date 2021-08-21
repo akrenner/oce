@@ -8,6 +8,7 @@ mapAxis(
   side = 1:2,
   longitude = TRUE,
   latitude = TRUE,
+  axisStyle = 1,
   tick = TRUE,
   line = NA,
   pos = NA,
@@ -30,7 +31,7 @@ mapAxis(
 \item{side}{the side at which labels are to be drawn.  If not provided,
 sides 1 and 2 will be used (i.e. bottom and left-hand sides).}
 
-\item{longitude}{either a logical value or a vector of longitudes. There
+\item{longitude}{either a logical value or a numeric vector of longitudes. There
 are three possible cases:
 (1) If \code{longitude=TRUE} (the default) then ticks and nearby numbers will occur at the
 longitude grid established by the previous call to \code{\link[=mapPlot]{mapPlot()}};
@@ -43,6 +44,14 @@ so some longitude values might get ticks but not numbers. To get ticks
 but not numbers, set \code{cex.axis=0}.}
 
 \item{latitude}{similar to \code{longitude} but for latitude.}
+
+\item{axisStyle}{an integer specifying the style of labels for the numbers
+on axes.  The choices are:
+1 for signed numbers without additional labels;
+2 (the default) for unsigned numbers followed by letters indicating the hemisphere;
+3 for signed numbers followed by a degree sign;
+4 for unsigned numbers followed by a degree sign; and
+5 for signed numbers followed by a degree sign and letters indicating the hemisphere.}
 
 \item{tick}{parameter passed to \code{\link[=axis]{axis()}}.}
 
@@ -82,25 +91,29 @@ amount of debugging information, or to 2 to get more.}
 }
 \description{
 Plot axis labels on an existing map.
-}
-\details{
-This function is still in development, and the argument list as well as the
-action taken are both subject to change, hence the brevity of this help page.
-
-Note that if a grid line crosses the axis twice, only one label will be drawn.
+This is an advanced function, requiring
+coordination with \code{\link[=mapPlot]{mapPlot()}} and (possibly) also with \code{\link[=mapGrid]{mapGrid()}},
+and so it is best avoided by novices, who may be satisfied
+with the defaults used by \code{\link[=mapPlot]{mapPlot()}}.
 }
 \examples{
 \donttest{
 library(oce)
 data(coastlineWorld)
-par(mar=c(2, 2, 3, 1))
+par(mar=c(2, 2, 1, 1))
 lonlim <- c(-180, 180)
-latlim <- c(60, 120)
+latlim <- c(70, 110)
+# In mapPlot() call, note axes and grid args, to
+# prevent over-plotting of defaults.  Some adjustments
+# might be required to the mapGrid() arguments, to
+# get agreement with the axis. This is why both
+# mapGrid() and mapAxis() are best avoided; it is
+# simpler to let mapPlot() handle these things.
 mapPlot(coastlineWorld, projection="+proj=stere +lat_0=90",
         longitudelim=lonlim, latitudelim=latlim,
-        grid=FALSE)
-mapGrid(15, 15, polarCircle=1/2)
-mapAxis()
+        col="tan", axes=FALSE, grid=FALSE)
+mapGrid(15, 15)
+mapAxis(axisStyle=5)
 }
 
 }

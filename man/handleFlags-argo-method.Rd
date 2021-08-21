@@ -70,33 +70,33 @@ manipulate the contents of the \code{data} slot, based on
 such data-quality flags. For example, a common operation is to replace
 erroneous data with \code{NA}.
 
-If \code{metadata$flags} in the first argument
-is empty, then that object is returned, unaltered.
-Otherwise, \code{handleFlags} analyses the data-quality flags within
-the object, in context of the \code{flags} argument, and then interprets
-the \code{action} argument to select an action that is to be applied
-to the matched data.
+If the \code{flags} within \code{object}'s \code{metadata} slot is empty,
+then \code{object} is returned, unaltered.
+Otherwise, \code{handleFlags} examines \code{object@metadata$flags}
+in the context of the \code{flags} argument, and then
+carries out actions that are specified by the \code{actions} argument.
+By default, this sets the returned \code{data} entries to \code{NA},
+wherever the corresponding \code{metadata$flag} values
+signal unreliable data. To maintain a hint as to why
+\code{data} were changed, \code{metadata$flags} in the
+returned value is a direct copy of the corresponding
+entry in \code{object}.
 }
 \examples{
 library(oce)
 data(argo)
-# 1. Default: set to NA any data that is not flagged with
-# code value 1 (meaning `"passed_all_tests"`)
-argoNew <- handleFlags(argo, flags=c(0, 2:9))
+argoNew <- handleFlags(argo)
 # Demonstrate replacement, looking at the second profile
-f <- argo[["salinityFlag"]][,2] # first column with a flag=4 entry
+f <- argo[["salinityFlag"]][,2]
 df <- data.frame(flag=f, orig=argo[["salinity"]][,2], new=argoNew[["salinity"]][,2])
 df[11:15,] # notice line 13
-
-# 2. A less restrictive case: focussing just on salinity,
-# retain only data with flags 1 (meaning `"passed_all_tests"`)
-# and 2 (`"probably_good"`).
-argoNew <- handleFlags(argo, flags=list(salinity=c(0, 3:9)))
 
 }
 \references{
 \enumerate{
-\item \url{http://www.argo.ucsd.edu/Argo_date_guide.html#dmodedata}
+\item Wong, Annie, Robert Keeley, Thierry Carval, and Argo Data Management Team.
+"Argo Quality Control Manual for CTD and Trajectory Data," January 1, 2020.
+\url{https://archimer.ifremer.fr/doc/00228/33951/}.
 }
 }
 \seealso{

@@ -1,5 +1,6 @@
 ## vim:textwidth=80:expandtab:shiftwidth=4:softtabstop=4
 
+
 abbreviateVector <- function(x)
 {
     if (1 >= length(x)) {
@@ -196,17 +197,15 @@ argShow <- function(x, nshow=4, last=FALSE, sep="=")
 {
     if (missing(x))
         return("")
-    name <- paste(substitute(x))
+    name <- paste(substitute(expr=x, env=environment()))
     res <- ""
+    nx <- length(x)
     if (missing(x)) {
         res <- "(missing)"
     } else {
         if (is.null(x)) {
             res <- NULL
         } else {
-            nx <- length(x)
-            ##if (nx > 1)
-            ##    name <- paste(name, "[", nx, "]", sep="")
             if (is.function(x)) {
                 res <- "(provided)"
             } else if (nx==1) {
@@ -222,6 +221,16 @@ argShow <- function(x, nshow=4, last=FALSE, sep="=")
     if (!last)
         res <- paste(res, ",", sep="")
     res
+}
+
+#' Get first finite value in a vector or array, or NULL if none
+#' @param v A numerical vector or array.
+firstFinite <- function(v)
+{
+    if (!is.vector(v))
+        v <- as.vector(v)
+    first <- which(is.finite(v))
+    if (length(first) > 0) v[first[1]] else NULL
 }
 
 #' Read a World Ocean Atlas NetCDF File
@@ -317,56 +326,231 @@ shortenTimeString <- function(t, debug=getOption("oceDebug"))
     tc
 }
 
-#' Get first finite value in a vector or array, or NULL if none
-#' @param v A numerical vector or array.
-firstFinite <- function(v)
+#' Convert each of a vector of strings from SNAKE_CASE to camelCase
+#'
+#' `snakeToCamel` converts "snake-case" characters such as `"NOVA_SCOTIA"`
+#' to "camel-case" values, such as `"NovaScotia"`.  It was written for
+#' use by [read.argo()], but it also may prove helpful in other contexts.
+#'
+#' The basic procedure is to chop the string up into substrings separated by
+#' the underline character, then to upper-case the first letter of
+#' all substrings except the first, and then to paste the substrings
+#' together.
+#'
+#' However, there are exceptions.  First, any upper-case string that contains no
+#' underlines is converted to lower case, but any mixed-case string with no
+#' underlines is returned as-is (see the second example). Second, if
+#' the `specialCases` argument contains `"QC"`, then the
+#' `QC` is passed through directly (since it is an acronym) and
+#' if the first letter of remaining text is upper-cased (contrast
+#' see the four examples).
+#'
+#' @param s A vector of character values.
+#'
+#' @param specialCases A vector of character values that tell which
+#' special-cases to apply, or `NULL` (the default) to turn off special
+#' cases.  The only permitted special case at the moment is `"QC"` (see
+#' \dQuote{Details}) but the idea of this argument is that other cases
+#' can be added later, if needed.
+#'
+#' @return A vector of character values
+#'
+#' @examples
+#' library(oce)
+#' snakeToCamel("PARAMETER_DATA_MODE")   # "parameterDataMode"
+#' snakeToCamel("PARAMETER")             # "parameter"
+#' snakeToCamel("HISTORY_QCTEST")        # "historyQctest"
+#' snakeToCamel("HISTORY_QCTEST", "QC")  # "historyQCTest"
+#' snakeToCamel("PROFILE_DOXY_QC")       # "profileDoxyQc"
+#' snakeToCamel("PROFILE_DOXY_QC", "QC") # "profileDoxyQC"
+#' @author Dan Kelley
+snakeToCamel <- function(s, specialCases=NULL)
 {
-    if (!is.vector(v))
-        v <- as.vector(v)
-    first <- which(is.finite(v))
-    if (length(first) > 0) v[first[1]] else NULL
+    ns <- length(s)
+    if ("QC" %in% specialCases) {
+        s <- gsub("QCTEST", "Q_C_TEST", s) # for e.g. HISTORY_QCTEST
+        s <- gsub("QC$", "Q_C", s)         # for e.g. PROFILE_DOXY_QC
+        s <- gsub("Qc$", "QC", s)          # for e.g. positionQc (converted previously)
+    }
+    if (ns < 1)
+        stop("'s' must be a vector of character values")
+    res <- vector("character", length=ns)
+    for (is in seq(1L, length(s))) {
+        if (!grepl("_", s[is])) {
+            ## Handle the single-word case. If all upper-case, convert to lower,
+            ## but otherwise, leave it as it is.
+            res[is] <- if (s[is] == toupper(s[is])) tolower(s[is]) else s[is]
+        } else {
+            ## Handle the multi-word case. Start by making it lower case.
+            s[is] <- tolower(s[is])
+            ## Now, split and then work through the words
+            w <- strsplit(s[is], "_")[[1]]
+            nw <- length(w)
+            res[is] <- w[1]
+            for (iw in 2:nw) {
+                wl <- tolower(w[iw])
+                res[is] <- paste0(res[is], toupper(substring(wl,1,1)), substring(wl,2))
+            }
+        }
+    }
+    res
 }
+
 
 #' Decode units, from strings
 #'
-#' @param s A string.
+#' This is mainly intended for internal use within the package, e.g. by
+#' [read.odf()], and so the list of string-to-unit mappings is not
+#' documented, since developers can learn it from simple examination
+#' of the code.  The focus of `unitFromString()` is on strings that are
+#' found in oceanographic files available to the author, *not* on all
+#' possible units.
+#'
+#' @param unit a character value indicating the unit. These
+#' are matched according to rules developed to work with actual
+#' data files, and so the list is not by any means exhaustive.
+#'
+#' @param scale a character value indicating the scale.  The default value
+#' of `NULL` dictates that the scale is to be inferred from the unit. If
+#' a non-`NULL` value is supplied, it will be used, even if it makes no sense
+#' in relation to value of `unit`.
 #'
 #' @return A [list()] of two items: `unit` which is an
 #' [expression()], and `scale`, which is a string.
 #'
 #' @examples
-#' unitFromString("DB") # dbar
+#' unitFromString("dbar")   # dbar (no scale)
+#' unitFromString("deg c")  # modern temperature (ITS-90 scale)
 #' @family functions that interpret variable names and units from headers
-unitFromString <- function(s)
+unitFromString <- function(unit, scale=NULL)
 {
-    ## 1. Strings that have been encountered in WOCE secton (.csv) files
-    ## ",,,,,,,,,,,,DBAR,IPTS-68,PSS-78,,PSS-78,,UMOL/KG,,UMOL/KG,,UMOL/KG,,UMOL/KG,,UMOL/KG,"
-    ##> message("unitFromString(", s, ")")
-    if (s == "DB" || s == "DBAR")
-        return(list(unit=expression(db), scale=""))
-    if (s == "DEG C")
-        return(list(unit=expression(degree*C), scale="")) # unknown scale
-    if (s == "FMOL/KG")
-        return(list(unit=expression(fmol/kg), scale=""))
-    if (s == "ITS-90 DEGC" || s == "ITS-90")
-        return(list(unit=expression(degree*C), scale="ITS-90"))
-    if (s == "IPTS-68 DEGC" || s == "IPTS-68")
-        return(list(unit=expression(degree*C), scale="IPTS-68"))
-    if (s == "PSS-78")
-        return(list(unit=expression(), scale="PSS-78"))
-    if (s == "PMOL/KG")
-        return(list(unit=expression(pmol/kg), scale=""))
-    if (s == "PSU")
-        return(list(unit=expression(), scale="PSS-78"))
-    if (s == "ML/L")
-        return(list(unit=expression(ml/l), scale=""))
-    if (s == "UG/L")
-        return(list(unit=expression(mu*g/l), scale=""))
-    if (s == "UMOL/KG")
-        return(list(unit=expression(mu*mol/kg), scale=""))
-    if (s == "%")
-        return(list(unit=expression(percent), scale=""))
-    return(list(unit=as.expression(s), scale=""))
+    if (length(unit) > 1L)
+        stop("cannot work with a vector of strings")
+    u <- trimws(unit)                  # remove any leading/trailing whitespace
+    U <- toupper(u)                    # simplify some match tests
+    #> message("unit=\"", unit, "\", scale=\"", scale, "\"")
+    if (U == "" || U == "NONE" || U == "(NONE)")
+        return(list(unit=expression(), scale=if (is.null(scale)) "" else scale))
+    if (U == "10**3CELLS/L")
+        return(list(unit=expression(10^3*cells/l), scale=if (is.null(scale)) "" else scale))
+    if (U == "CODE")
+        return(list(unit=expression(), scale=if (is.null(scale)) "" else scale))
+    if (U == "COUNTS")
+        return(list(unit=expression(), scale=if (is.null(scale)) "" else scale))
+    if (U == "DB") # NOTE: this really should be decibel, but ODF files use it for decibar, sometimes
+        return(list(unit=expression(dbar), scale=if (is.null(scale)) "" else scale))
+    if (U == "DBAR" || U == "DECIBAR" || U == "DECIBARS")
+        return(list(unit=expression(dbar), scale=if (is.null(scale)) "" else scale))
+    if (U == "DEG C" || U == "DEGREES C")
+        return(list(unit=expression(degree*C), scale=if (is.null(scale)) "ITS-90" else scale))
+    if (U == "FMOL/KG")
+        return(list(unit=expression(fmol/kg), scale=if (is.null(scale)) "" else scale))
+    if (U == "G")
+        return(list(unit=expression(g), scale=if (is.null(scale)) "" else scale))
+    if (U == "GMT")
+        return(list(unit=expression(), scale=if (is.null(scale)) "" else scale))
+    if (U == "HPA")
+        return(list(unit=expression(hPa), scale=if (is.null(scale)) "" else scale))
+    if (U == "HZ")
+        return(list(unit=expression(Hz), scale=if (is.null(scale)) "" else scale))
+    if (U == "ITS-90" || U == "ITS-90 DEGC")
+        return(list(unit=expression(degree*C), scale=if (is.null(scale)) "ITS-90" else scale))
+    if (U == "IPTS-68" || U == "IPTS-68 DEGC" || U == "IPTS-68, DEG C")
+        return(list(unit=expression(degree*C), scale=if (is.null(scale)) "IPTS-68" else scale))
+    if (U == "ITS-68" || U == "ITS-68 DEGC" || U == "ITS-68, DEG C") # not an accepted unit, but seen in ODF files
+        return(list(unit=expression(degree*C), scale=if (is.null(scale)) "IPTS-68" else scale))
+    if (U == "KG/M^3" || U == "KG/M**3")
+        return(list(unit=expression(kg/m^3), scale=if (is.null(scale)) "" else scale))
+    if (U == "M" || U == "METER" || U == "METRE" || U == "METERS" || U == "METRES")
+        return(list(unit=expression(m), scale=if (is.null(scale)) "" else scale))
+    if (U == "M**3/KG" || U == "M^3/KG")
+        return(list(unit=expression(m^3/kg), scale=if (is.null(scale)) "" else scale))
+    if (U == "MA")
+        return(list(unit=expression(ma), scale=if (is.null(scale)) "" else scale))
+    if (U == "M/S" || U == "METER/SEC" || U == "M/S" || U == "METRE/SEC")
+        return(list(unit=expression(m/s), scale=if (is.null(scale)) "" else scale))
+    if (U == "MG/M^3" || U == "MG/M**3")
+        return(list(unit=expression(mg/m^3), scale=if (is.null(scale)) "" else scale))
+    if (U == "MICRON" || U == "MICRONS")
+        return(list(unit=expression(mu*m), scale=if (is.null(scale)) "" else scale))
+    if (grepl("^\\s*MICRO[ ]?MOL[E]?S/M(\\*){0,2}2/S(EC)?\\s*$", U))
+        return(list(unit=expression(mu*mol/m/s), scale=if (is.null(scale)) "" else scale))
+    if (U == "ML/L")
+        return(list(unit=expression(ml/l), scale=if (is.null(scale)) "" else scale))
+    if (U == "M/S" || U == "M/SEC")
+        return(list(unit=expression(m/s), scale=if (is.null(scale)) "" else scale))
+    if (U == "M^-1/SR")
+        return(list(unit=expression(1/m/sr), scale=if (is.null(scale)) "" else scale))
+    if (U == "MHO/CM" || U == "MHOS/CM") # 1 mho (archaic) = 1 Siemen (modern)
+        return(list(unit=expression(S/cm), scale=if (is.null(scale)) "" else scale))
+    if (U == "MHO/M" || U == "MHOS/M") # 1 mho (archaic) = 1 Siemen (modern)
+        return(list(unit=expression(S/m), scale=if (is.null(scale)) "" else scale))
+    if (U == "MHO/CM" || U == "MHOS/CM") # 1 mho (archaic) = 1 Siemen (modern)
+        return(list(unit=expression(S/cm), scale=if (is.null(scale)) "" else scale))
+    if (U == "MMHO") # 1 mho (archaic) = 1 Siemen (modern)
+        return(list(unit=expression(mS), scale=if (is.null(scale)) "" else scale))
+    if (U == "NBS SCALE")
+        return(list(unit=expression(), scale=if (is.null(scale)) "NBS" else scale))
+    if (U == "NTU")
+        return(list(unit=expression(NTU), scale=if (is.null(scale)) "" else scale))
+    if (U == "PPM")
+        return(list(unit=expression(ppm), scale=if (is.null(scale)) "" else scale))
+    if (U == "PSS-78" || U == "PSU")
+        return(list(unit=expression(), scale=if (is.null(scale)) "PSS-78" else scale))
+    if (U == "PMOL/KG")
+        return(list(unit=expression(pmol/kg), scale=if (is.null(scale)) "" else scale))
+    if (U == "PSU")
+        return(list(unit=expression(), scale=if (is.null(scale)) "PSS-78" else scale))
+    if (U == "ML/L")
+        return(list(unit=expression(ml/l), scale=if (is.null(scale)) "" else scale))
+    if (U == "S" || U == "SEC" || U == "SECOND")
+        return(list(unit=expression(s), scale=if (is.null(scale)) "" else scale))
+    if (u == "s/m")
+        return(list(unit=expression(s/m), scale=if (is.null(scale)) "" else scale))
+    if (u == "S/m")
+        return(list(unit=expression(S/m), scale=if (is.null(scale)) "" else scale))
+    if (u == "Total scale")
+        return(list(unit=expression(), scale=if (is.null(scale)) "" else scale))
+    if (u == "True degrees")
+        return(list(unit=expression(degree), scale=if (is.null(scale)) "" else scale))
+    if (u == "uA")
+        return(list(unit=expression(mu*a), scale=if (is.null(scale)) "" else scale))
+    # > stringi::stri_escape_unicode() indicates that Greek mu is "\u00b5"
+    if (u == "\u00b5einsteins/s/m^2" || U == "UEINSTEINS/S/M**2" || U == "UEINSTEINS/S/M^2")
+        return(list(unit=expression(mu*mol/m^2/s), scale=if (is.null(scale)) "" else scale))
+    # > stringi::stri_escape_unicode() indicates that Greek mu is "\u00b5"
+    if (u == "\u00b5M")
+        return(list(unit=expression(mu*M), scale=if (is.null(scale)) "" else scale))
+    if (U == "UMOL/KG")
+        return(list(unit=expression(mu*mol/kg), scale=if (is.null(scale)) "" else scale))
+    if (u == "ug/l")
+        return(list(unit=expression(mu*g/l), scale=if (is.null(scale)) "" else scale))
+    if (grepl("^mmol/m\\*\\*3$", unit, ignore.case=TRUE))
+        return(list(unit=expression(mmol/m^3), scale=if (is.null(scale)) "" else scale))
+    if (grepl("^mmol/m\\^3$", unit, ignore.case=TRUE))
+        return(list(unit=expression(mmol/m^3), scale=if (is.null(scale)) "" else scale))
+    if (U == "UMOL/KG")
+        return(list(unit=expression(mmol/kg), scale=if (is.null(scale)) "" else scale))
+    if (U == "UMOL/M**3")
+        return(list(unit=expression(mu*mol/m^3), scale=if (is.null(scale)) "" else scale))
+    if (U == "UMOL/M**2/S")
+        return(list(unit=expression(mu*mol/m^2/s), scale=if (is.null(scale)) "" else scale))
+    if (U == "UMOL PHOTONS/M2/S")
+        return(list(unit=expression(mu*mol/m^2/s), scale=if (is.null(scale)) "" else scale))
+    if (U == "UTC")
+        return(list(unit=expression(), scale=if (is.null(scale)) "" else scale))
+    if (U == "V")
+        return(list(unit=expression(V), scale=if (is.null(scale)) "" else scale))
+    if (U == "1/CM")
+        return(list(unit=expression(1/cm), scale=if (is.null(scale)) "" else scale))
+    if (U == "1/M")
+        return(list(unit=expression(1/m), scale=if (is.null(scale)) "" else scale))
+    if (U == "VOLT" || U == "VOLTS")
+        return(list(unit=expression(V), scale=if (is.null(scale)) "" else scale))
+    if (U == "%")
+        return(list(unit=expression(percent), scale=if (is.null(scale)) "" else scale))
+    # If none of the above worked, just try our best.
+    return(list(unit=as.expression(unit), scale=if (is.null(scale)) "" else scale))
 }
 
 ## #' Rename a duplicated item (used in reading CTD files)
@@ -686,7 +870,7 @@ titleCase <- function(w)
 #' imagep(x, y, v, zlab="v", asp=1)
 #' imagep(x, y, C$curl, zlab="curl", asp=1)
 #' hist(C$curl, breaks=100)
-#' @family functions relating to vector calculus
+#' @family things relating to vector calculus
 curl <- function(u, v, x, y, geographical=FALSE, method=1)
 {
     if (missing(u)) stop("must supply u")
@@ -1253,7 +1437,7 @@ binAverage <- function(x, y, xmin, xmax, xinc)
 #' u <- interpBarnes(wind$x, wind$y, wind$z)
 #' contour(u$xg, u$yg, u$zg)
 #' U <- ungrid(u$xg, u$yg, u$zg)
-#' points(U$x, U$y, col=oce.colorsJet(100)[rescale(U$grid, rlow=1, rhigh=100)], pch=20)
+#' points(U$x, U$y, col=oce.colorsViridis(100)[rescale(U$grid, rlow=1, rhigh=100)], pch=20)
 ungrid <- function(x, y, grid)
 {
     nrow <- nrow(grid)
@@ -1603,7 +1787,7 @@ smoothSomething <- function(x, ...)
 #' x <- 0.5 * t
 #' z <- 50 * (-1 + sin(2 * pi * t / 360))
 #' T <- 5 + 10 * exp(z / 100)
-#' palette <- oce.colorsJet(100)
+#' palette <- oce.colorsViridis(100)
 #' zlim <- range(T)
 #' drawPalette(zlim=zlim, col=palette)
 #' plot(x, z, type='p', pch=20, cex=3,
@@ -2245,6 +2429,11 @@ oce.spectrum <- oceSpectrum
 #' @param n number of elements to show at start and end. If `n`
 #' is negative, then all the elements are shown.
 #'
+#' @param showNA logical value indicating whether to show the number
+#' of `NA` values. This is done only if the output contains ellipses,
+#' meaning that some values are skipped, because if all values are shown,
+#' it will be perfectly obvious whether there are any `NA` values.
+#'
 #' @return A string ending in a newline character, suitable for
 #' display with [cat()] or [oceDebug()].
 #'
@@ -2256,12 +2445,12 @@ oce.spectrum <- oceSpectrum
 #' vectorShow("January", msg="The first month is")
 #'
 #' @author Dan Kelley
-vectorShow <- function(v, msg="", postscript="", digits=5, n=2L)
+vectorShow <- function(v, msg="", postscript="", digits=5, n=2L, showNA=FALSE)
 {
     DIM <- dim(v)
     nv <- length(v)
     if (!nchar(msg))
-        msg <- deparse(substitute(v))
+        msg <- deparse(substitute(expr=v, env=environment()))
     if (!is.null(DIM)) {
         msg <- paste(msg,
                      paste("[",
@@ -2291,6 +2480,8 @@ vectorShow <- function(v, msg="", postscript="", digits=5, n=2L)
                 res <- paste(msg, paste(format(v[1:n], digits=digits), collapse=", "),
                              ", ..., ", paste(format(v[nv-seq.int(n-1, 0)], digits=digits), collapse=", "),
                              sep="")
+                if (showNA)
+                    res <- paste0(res, " (", sum(is.na(v)), " NA)")
             }
         } else {
             if (showAll) {
@@ -2298,6 +2489,8 @@ vectorShow <- function(v, msg="", postscript="", digits=5, n=2L)
             } else {
                 res <- paste(msg, paste(v[1:n], collapse=", "),
                              ", ..., ", paste(v[nv-seq.int(n-1, 0)], collapse=", "), sep="")
+                if (showNA)
+                    res <- paste0(res, " (", sum(is.na(v)), " NA)")
             }
         }
     }
@@ -2336,22 +2529,21 @@ fullFilename <- function(filename)
 #' and including units as appropriate.
 #' Used by e.g. [plot,ctd-method()].
 #'
-#' @param item code for the label.  This must be an element from the following
-#' list, or an abbreviation that uniquely identifies an element through its
-#' first letters: `"S"`, `"C"`, `"conductivity mS/cm"`,
-#' `"conductivity S/m"`, `"T"`, `"theta"`, `"sigmaTheta"`,
-#' `"conservative temperature"`, `"absolute salinity"`,
-#' `"nitrate"`, `"nitrite"`, `"oxygen"`, \code{"oxygen
-#' saturation"}, `"oxygen mL/L"`, `"oxygen umol/L"`, \code{"oxygen
-#' umol/kg"}, `"phosphate"`, `"silicate"`, `"tritium"`,
-#' `"spice"`, `"fluorescence"`, `"p"`, `"z"`,
-#' `"distance"`, `"distance km"`, `"along-track distance km"`,
-#' `"heading"`, `"pitch"`, `"roll"`, `"u"`, `"v"`,
-#' `"w"`, `"speed"`, `"direction"`, `"eastward"`,
-#' `"northward"`, `"depth"`, `"elevation"`, `"latitude"`,
-#' `"longitude"`, `"frequency cph"`, `"sound speed"`, or \code{"spectral density
-#' m2/cph"}.
-#'
+#' @param item code for the label. The following common values are recognized:
+#' `"absolute salinity"`, `"along-spine distance km"`, `"along-track distance km"`,
+#' `"C"`, `"conductivity mS/cm"`, `"conductivity S/m"`, `"conservative temperature"`,
+#' `"CT"`, `"depth"`, `"direction"`, `"distance"`, `"distance km"`, `"eastward"`,
+#' `"elevation"`, `"fluorescence"`, `"frequency cph"`, `"heading"`, `"latitude"`,
+#' `"longitude"`, `"N2"`, `"nitrate"`, `"nitrite"`, `"northward"`, `"oxygen"`,
+#' `"oxygen mL/L"`, `"oxygen saturation"`, `"oxygen umol/kg"`, `"oxygen umol/L"`,
+#' `"p"`, `"phosphate"`, `"pitch"`, `"roll"`, `"S"`, `"SA"`,
+#' `"sigma0"`, `"sigma1"`, `"sigma2"`, `"sigma3"`, `"sigma4"`,
+#' `"sigmaTheta"`,
+#' `"silicate"`, `"sound speed"`, `"spectral density m2/cph"`, `"speed"`,
+#' `"spice"`, `"T"`, `"theta"`, `"tritium"`, `"u"`, `"v"`, `"w"`, or `"z"`.
+#' Other values may also be recognized, and if an unrecognized item is
+#' given, then it is returned, unaltered.
+#"
 #' @param axis a string indicating which axis to use; must be `x` or
 #' `y`.
 #'
@@ -2384,16 +2576,23 @@ resizableLabel <- function(item, axis="x", sep, unit=NULL, debug=getOption("oceD
         stop("must provide 'item'")
     if (axis != "x" && axis != "y")
         stop("axis must be \"x\" or \"y\"")
-    itemAllowed <- c("S", "C", "conductivity mS/cm", "conductivity S/m", "T",
+    itemAllowed <- c("S", "SA", "C", "CT", "conductivity mS/cm", "conductivity S/m", "T",
                      "theta", "sigmaTheta", "conservative temperature",
-                     "absolute salinity", "nitrate", "nitrite",
+                     "absolute salinity", "N2", "nitrate", "nitrite",
                      "oxygen", "oxygen saturation", "oxygen mL/L", "oxygen umol/L", "oxygen umol/kg",
                      "phosphate", "silicate", "tritium", "spice",
                      "fluorescence", "p", "z", "distance", "distance km",
-                     "along-track distance km", "heading", "pitch", "roll", "u",
+                     "along-spine distance km",
+                     "along-track distance km",
+                     "heading", "pitch", "roll", "u",
                      "v", "w", "speed", "direction", "eastward", "northward",
                      "depth", "elevation", "latitude", "longitude", "frequency cph",
-                     "sound speed", "spectral density m2/cph")
+                     "sound speed", "spectral density m2/cph",
+                     "sigma0", "sigma1", "sigma2", "sigma3", "sigma4")
+    ## FIXME: if anything is added, run the next, and paste results into roxygen.
+    ## > A<-paste0("'",paste(sort(itemAllowed), collapse="'`, `'"),"'");A
+    ## NOTE: some hand-tweaking must be done to fix linebreaks and (preferably) to
+    ## change the ' into a ".
     if (!missing(unit)) {
         if (is.list(unit)) {
             unit <- unit[[1]] # second item is a scale
@@ -2443,7 +2642,7 @@ resizableLabel <- function(item, axis="x", sep, unit=NULL, debug=getOption("oceD
         unit <- gettext("unitless", domain="R-oce")
         full <- bquote(.(var)*.(L)*.(unit[[1]])*.(R))
         abbreviated <- bquote("C")
-    } else if (item == "conservative temperature") {
+    } else if (item %in% c("CT", "conservative temperature")) {
         var <- gettext("Conservative Temperature", domain="R-oce")
         full <- bquote(.(var)*.(L)*degree*"C"*.(R))
         abbreviated <- bquote(Theta*.(L)*degree*"C"*.(R))
@@ -2484,6 +2683,10 @@ resizableLabel <- function(item, axis="x", sep, unit=NULL, debug=getOption("oceD
             full <- bquote(.(var)*.(L)*.(unit[[1]])*.(R))
             abbreviated <- bquote(phantom()^3*H*.(L)*.(unit[[1]])*.(R))
         }
+    } else if (item == "N2") {
+        ## full <- bquote("Square of Buoyancy Frequency"*.(L)*s^-2*.(R))
+        full  <- bquote(N^2*.(L)*s^-2*.(R))
+        abbreviated <- bquote(N^2*.(L)*s^-2*.(R))
     } else if (item == "nitrate") {
         var <- gettext("Nitrate", domain="R-oce")
         if (is.null(unit)) {
@@ -2567,7 +2770,7 @@ resizableLabel <- function(item, axis="x", sep, unit=NULL, debug=getOption("oceD
     } else if (item == "S") {
         full <- gettext("Practical Salinity", domain="R-oce")
         abbreviated <- expression(S)
-    } else if (item == "absolute salinity") {
+    } else if (item %in% c("SA", "absolute salinity")) {
         var <- gettext("Absolute Salinity", domain="R-oce")
         full <- bquote(.(var)*.(L)*g/kg*.(R))
         abbreviated <- bquote(S[A]*.(L)*g/kg*.(R))
@@ -2583,6 +2786,9 @@ resizableLabel <- function(item, axis="x", sep, unit=NULL, debug=getOption("oceD
         abbreviated <- full <- bquote(.(var)*.(L)*m*.(R))
     } else if (item == "distance km") {
         var <- gettext("Distance", domain="R-oce")
+        abbreviated <- full <- bquote(.(var)*.(L)*km*.(R))
+    } else if (item == "along-spine distance km") {
+        var <- gettext("Along-spine Distance", domain="R-oce")
         abbreviated <- full <- bquote(.(var)*.(L)*km*.(R))
     } else if (item == "along-track distance km") {
         var <- gettext("Along-track Distance", domain="R-oce")
@@ -2775,9 +2981,10 @@ latlonFormat <- function(lat, lon, digits=max(6, getOption("digits") - 1))
             res[i] <- "Lat and lon unknown"
         else
             res[i] <- paste(format(abs(lat[i]), digits=digits),
-                             if (lat[i] > 0) "N  " else "S  ",
+                             if (lat[i] > 0) gettext("N", domain="R-oce") else gettext("S", domain="R-oce"),
+                             " ",
                              format(abs(lon[i]), digits=digits),
-                             if (lon[i] > 0) "E" else "W",
+                             if (lon[i] > 0) gettext("E", domain="R-oce") else gettext("W", domain="R-oce"),
                              sep="")
     }
     res
@@ -2807,7 +3014,7 @@ latFormat <- function(lat, digits=max(6, getOption("digits") - 1))
             res[i] <-  ""
         else
             res[i] <- paste(format(abs(lat[i]), digits=digits),
-                             if (lat[i] > 0) "N" else "S", sep="")
+                             if (lat[i] > 0) gettext("N", domain="R-oce") else gettext("S", domain="R-oce"), sep="")
     }
     res
 }
@@ -2836,7 +3043,7 @@ lonFormat <- function(lon, digits=max(6, getOption("digits") - 1))
             res[i] <- ""
         else
             res[i] <- paste(format(abs(lon[i]), digits=digits),
-                             if (lon[i] > 0) "E" else "S",
+                             if (lon[i] > 0) gettext("E", domain="R-oce") else gettext("W", domain="R-oce"),
                              sep="")
     res
 }
@@ -2888,7 +3095,7 @@ lon360 <- function(x)
 #' Determine time offset from timezone
 #'
 #' The data are from
-#' \url{https://www.timeanddate.com/library/abbreviations/timezones/} and were
+#' \url{https://www.timeanddate.com/time/zones/} and were
 #' hand-edited to develop this code, so there may be errors.  Also, note that
 #' some of these contradict; if you examine the code, you'll see some
 #' commented-out portions that represent solving conflicting definitions by
@@ -2903,7 +3110,7 @@ lon360 <- function(x)
 #' @examples
 #' library(oce)
 #' cat("Atlantic Standard Time is ", GMTOffsetFromTz("AST"), "hours after UTC")
-#' @family functions relating to time
+#' @family things relating to time
 GMTOffsetFromTz <- function(tz)
 {
     ## Data are from
@@ -3249,12 +3456,13 @@ oce.filter <- oceFilter
 
 #' Grid data using Barnes algorithm
 #'
-#' The algorithm follows that described by Koch et al. (1983), with the
-#' addition of the ability to blank out the grid in spots where data are
-#' sparse, using the `trim` argument, and the ability to pre-grid, with
-#' the `pregrid` argument.
+#' The algorithm follows that described by Koch et al. (1983), except
+#' that `interpBarnes` adds (1) the ability to
+#' blank out the grid where data are
+#' sparse, using the `trim` argument, and (2) the ability to
+#' pre-grid, with the `pregrid` argument.
 #'
-#' @param x,y a vector of x and ylocations.
+#' @param x,y a vector of x and y locations.
 #'
 #' @param z a vector of z values, one at each (x,y) location.
 #'
@@ -3271,14 +3479,15 @@ oce.filter <- oceFilter
 #' [seq()] spanning the data range.  These values `xgl` are only
 #' examined if `xg` and `yg` are not supplied.
 #'
-#' @param xr,yr optional values defining the width of the radius ellipse in the
-#' x and y directions.  If not supplied, these are calculated as the span of x
+#' @param xr,yr optional values defining the x and y radii of the weighting ellipse.
+#' If not supplied, these are calculated as the span of x
 #' and y over the square root of the number of data.
 #'
-#' @param gamma grid-focussing parameter.  At each iteration, `xr` and
+#' @param gamma grid-focussing parameter.  At each successive iteration, `xr` and
 #' `yr` are reduced by a factor of `sqrt(gamma)`.
 #'
-#' @param iterations number of iterations.
+#' @param iterations number of iterations.  Set this to 1 to perform just
+#' one iteration, using the radii as described at `xr,yr` above.
 #'
 #' @param trim a number between 0 and 1, indicating the quantile of data weight
 #' to be used as a criterion for blanking out the gridded value (using
@@ -3340,7 +3549,6 @@ oce.filter <- oceFilter
 #' text(wind$x, wind$y, round(mismatch), col="blue")
 #' title("Numbers are percent mismatch between grid and data")
 #'
-#'
 #' # 4. As 3, but contour the mismatch
 #' mismatchGrid <- interpBarnes(wind$x, wind$y, mismatch)
 #' contour(mismatchGrid$xg, mismatchGrid$yg, mismatchGrid$zg, labcex=1)
@@ -3361,7 +3569,23 @@ interpBarnes <- function(x, y, z, w,
                          debug=getOption("oceDebug"))
 {
     debug <- max(0, debug)
-    oceDebug(debug, "interpBarnes(x, ...) {\n", unindent=1, sep="")
+    oceDebug(debug, "interpBarnes(",
+        argShow(x),
+        argShow(y),
+        argShow(z),
+        argShow(w),
+        argShow(xg),
+        argShow(xg),
+        argShow(yg),
+        argShow(xgl),
+        argShow(ygl),
+        argShow(xr),
+        argShow(yr),
+        argShow(gamma),
+        argShow(iterations),
+        argShow(trim),
+        argShow(pregrid, last=TRUE),
+        ") {\n", unindent=1, sep="")
     if (!is.vector(x))
         stop("x must be a vector")
     n <- length(x)
@@ -3369,6 +3593,8 @@ interpBarnes <- function(x, y, z, w,
         stop("lengths of x and y disagree; they are ", n, " and ", length(y))
     if (length(z) != n)
         stop("lengths of x and z disagree; they are ", n, " and ", length(z))
+    xrGiven <- !missing(xr)
+    yrGiven <- !missing(yr)
     if (missing(w))
         w <- rep(1.0, length(x))
     if (missing(xg)) {
@@ -3381,6 +3607,7 @@ interpBarnes <- function(x, y, z, w,
         } else {
             xg <- seq(min(x, na.rm=TRUE), max(x, na.rm=TRUE), length.out=xgl)
         }
+        oceDebug(debug, "computed ", vectorShow(xg))
     }
     if (missing(yg)) {
         if (missing(ygl)) {
@@ -3392,16 +3619,19 @@ interpBarnes <- function(x, y, z, w,
         } else {
             yg <- seq(min(y, na.rm=TRUE), max(y, na.rm=TRUE), length.out=ygl)
         }
+        oceDebug(debug, "computed ", vectorShow(yg))
     }
-    if (missing(xr)) {
+    if (!xrGiven) {
         xr <- diff(range(x, na.rm=TRUE)) / sqrt(n)
         if (xr == 0)
             xr <- 1
+        oceDebug(debug, "computed xr=", xr, " based on data density\n")
     }
-    if (missing(yr)) {
+    if (!yrGiven) {
         yr <- diff(range(y, na.rm=TRUE)) / sqrt(n)
         if (yr == 0)
             yr <- 1
+        oceDebug(debug, "computed yr=", yr, " based on data density\n")
     }
     ## Handle pre-gridding (code not DRY but short enough to be ok)
     if (is.logical(pregrid)) {
@@ -3433,20 +3663,26 @@ interpBarnes <- function(x, y, z, w,
         y <- pg$y
         z <- pg$f
     }
-
-    oceDebug(debug, vectorShow(xg))
-    oceDebug(debug, vectorShow(yg))
-    oceDebug(debug, "xr=", xr, ", yr=", yr, ", gamma=", gamma, ", iterations=", iterations, "\n")
+    for (i in seq_len(iterations))
+        oceDebug(debug, "  Iteration ", i, ": use xr=", xr*gamma^((i-1)/2), " and yr=", yr*gamma^((i-1)/2), "\n")
 
     ok <- !is.na(x) & !is.na(y) & !is.na(z) & !is.na(w)
-    g <- do_interp_barnes(x[ok], y[ok], z[ok], w[ok], xg, yg, xr, yr, gamma, iterations)
-    if (trim >= 0 && trim <= 1) {
-        bad <- g$wg < quantile(g$wg, trim, na.rm=TRUE)
-        g$zg[bad] <- NA
+    if (sum(ok) > 0) {
+        g <- do_interp_barnes(x[ok], y[ok], z[ok], w[ok], xg, yg, xr, yr, gamma, iterations)
+        if (trim >= 0 && trim <= 1) {
+            bad <- g$wg < quantile(g$wg, trim, na.rm=TRUE)
+            g$zg[bad] <- NA
+        }
+        rval <- list(xg=xg, yg=yg, zg=g$zg, wg=g$wg, zd=g$zd)
+    } else {
+        rval <- list(xg=xg, yg=yg,
+                     zg=matrix(NA, nrow=length(xg), ncol=length(yg)),
+                     wg=matrix(NA, nrow=length(xg), ncol=length(yg)),
+                     zd=rep(NA, length(x)))
     }
-    oceDebug(debug, sprintf("filled %.3f%% of z matrix\n", 100*sum(is.finite(g$zg))/prod(dim(g$zg))))
+    oceDebug(debug, sprintf("filled %.3f%% of z matrix\n", 100*sum(is.finite(rval$zg))/prod(dim(rval$zg))))
     oceDebug(debug, "} # interpBarnes(...)\n", unindent=1, sep="")
-    list(xg=xg, yg=yg, zg=g$zg, wg=g$wg, zd=g$zd)
+    rval
 }
 
 #' Coriolis parameter on rotating earth
@@ -4238,17 +4474,17 @@ integerToAscii <- function(i)
 #' @section Historical Notes:
 #' For about a decade, `magneticField` used the version 12 formulae provided
 #' by IAGA, but the code was updated on March 3, 2020, to version 13.  Example
-#' 3 shows that the differences in declination are typicaly under 2 degrees
+#' 3 shows that the differences in declination are typically under 2 degrees
 #' (with 95 percent of the data lying between -1.7 and 0.7 degrees).
 #'
 #' @references
 #' 1. The underlying Fortran code for version 12 is from `igrf12.f`, downloaded the NOAA
 #' website (\url{https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html}) on June 7,
-#' 2015. That for version 13 is `igrf13.f`, downloadd from the NOAA website
+#' 2015. That for version 13 is `igrf13.f`, downloaded from the NOAA website
 #' (\url{https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html} on March 3, 2020.
 #' 2. Witze, Alexandra. \dQuote{Earth's Magnetic Field Is Acting up and Geologists Don't Know Why.}
 #' Nature 565 (January 9, 2019): 143.
-#' \url{https://doi.org/10.1038/d41586-019-00007-1}.
+#' \doi{10.1038/d41586-019-00007-1}
 #'
 #' @examples
 #' library(oce)
@@ -4600,6 +4836,9 @@ ctimeToSeconds <- function(ctime)
 #' @param unindent integer giving the number of levels to un-indent,
 #' e.g. for start and end lines from a called function.
 #'
+#' @param sep character to insert between elements of `...`, by passing
+#' it to [cat()].
+#'
 #' @author Dan Kelley
 #'
 #' @examples
@@ -4611,7 +4850,7 @@ ctimeToSeconds <- function(ctime)
 #' oceDebug(debug=1, "Example", 6, "Blue", style="blue")
 #' mycyan <- function(...) paste("\033[36m", paste(..., sep=" "), "\033[0m", sep="")
 #' oceDebug(debug=1, "Example", 7, "User-set cyan", style=mycyan)
-oceDebug <- function(debug=0, ..., style="plain", unindent=0)
+oceDebug <- function(debug=0, ..., style="plain", unindent=0, sep="")
 {
     debug <- if (debug > 4) 4 else max(0, floor(debug + 0.5))
     if (debug > 0) {
@@ -4619,49 +4858,49 @@ oceDebug <- function(debug=0, ..., style="plain", unindent=0)
         if (is.character(style) && style == "plain") {
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
         } else if (is.character(style) && style == "bold") {
             cat("\033[1m")
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
             cat("\033[0m")
         } else if (is.character(style) && style == "italic") {
             cat("\033[3m")
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
             cat("\033[0m")
         } else if (is.character(style) && style == "red") {
             cat("\033[31m")
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
             cat("\033[0m")
         } else if (is.character(style) && style == "green") {
             cat("\033[32m")
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
             cat("\033[0m")
         } else if (is.character(style) && style == "blue") {
             cat("\033[34m")
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
             cat("\033[0m")
         } else if (is.function(style)) {
             if (n > 0)
                 cat(style(paste(rep("  ", n), collapse="")))
-            cat(style(...))
+            cat(style(...), sep=sep)
         } else { # fallback
             if (n > 0)
                 cat(paste(rep("  ", n), collapse=""))
-            cat(...)
+            cat(..., sep=sep)
         }
         flush.console()
     }
-    invisible()
+    invisible(NULL)
 }
 oce.debug <- oceDebug
 
@@ -4861,7 +5100,7 @@ integrateTrapezoid <- function(x, y, type=c("A", "dA", "cA"), xmin, xmax)
 #' contour(x, y, v, asp=1, main=expression(v))
 #' contour(x, y, sqrt(u^2+v^2), asp=1, main=expression(speed))
 #'
-#' @family functions relating to vector calculus
+#' @family things relating to vector calculus
 grad <- function(h, x=seq(0, 1, length.out=nrow(h)), y=seq(0, 1, length.out=ncol(h)))
 {
     if (missing(h))
@@ -4965,7 +5204,7 @@ trimString <- function(s)
 #' Perform lowpass digital filtering
 #'
 #' The filter coefficients are constructed using standard definitions,
-#' and then \link[stats]{filter} in the \pkg{stats} package is
+#' and then [stats::filter()] is
 #' used to filter the data. This leaves `NA`
 #' values within half the filter length of the ends of the time series, but
 #' these may be replaced with the original `x` values, if the argument
@@ -5047,4 +5286,6 @@ lowpass <- function(x, filter="hamming", n, replace=TRUE, coefficients=FALSE)
     }
     rval
 }
+
+
 
