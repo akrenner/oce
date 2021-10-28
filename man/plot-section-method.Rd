@@ -215,7 +215,10 @@ The type of plot is governed by \code{which}, as follows.
 \itemize{
 \item \code{which=0} or \code{"potential temperature"} for temperature contours
 \item \code{which=1} or \code{"temperature"} for temperature contours (the default)
-\item \code{which=2} or \code{"salinity"} for salinity contours
+\item \code{which=2} or \code{"salinity"} for salinity contours (meaning Practical
+Salinity if \code{eos=="unesco"}, otherwise meaning Absolute Salinity)
+\item \code{which=2.1} or \code{"practical salinity"} for Practical Salinity contours
+\item \code{which=2.2} or \code{"absolute salinity"} for Absolute Salinity contours
 \item \code{which=3} or \code{"sigmaTheta"} for sigma-theta contours
 \item \code{which=4} or \code{"nitrate"} for nitrate concentration contours
 \item \code{which=5} or \code{"nitrite"} for nitrite concentration contours

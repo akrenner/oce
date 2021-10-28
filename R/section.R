@@ -982,7 +982,10 @@ sectionAddCtd <- sectionAddStation
 #' The type of plot is governed by `which`, as follows.
 #' * `which=0` or `"potential temperature"` for temperature contours
 #' * `which=1` or `"temperature"` for temperature contours (the default)
-#' * `which=2` or `"salinity"` for salinity contours
+#' * `which=2` or `"salinity"` for salinity contours (meaning Practical
+#'    Salinity if `eos=="unesco"`, otherwise meaning Absolute Salinity)
+#' * `which=2.1` or `"practical salinity"` for Practical Salinity contours
+#' * `which=2.2` or `"absolute salinity"` for Absolute Salinity contours
 #' * `which=3` or `"sigmaTheta"` for sigma-theta contours
 #' * `which=4` or `"nitrate"` for nitrate concentration contours
 #' * `which=5` or `"nitrite"` for nitrite concentration contours
@@ -1315,6 +1318,8 @@ setMethod(f="plot",
                   which[which==0] <- "potential temperature"
                   which[which==1] <- "temperature"
                   which[which==2] <- "salinity"
+                  which[which==2.1] <- "practical salinity"
+                  which[which==2.2] <- "absolute salinity"
                   which[which==3] <- "sigmaTheta"
                   which[which==4] <- "nitrate"
                   which[which==5] <- "nitrite"
@@ -1550,7 +1555,7 @@ setMethod(f="plot",
                       }
                   } else {
                       ## not a map
-                      zAllMissing <- all(is.na(x[[variable]]))
+                      zAllMissing <- TRUE
                       ##> message("zAllMissing=", zAllMissing)
                       ##> message("drawPoints=", drawPoints)
                       ##> message("ztype='", ztype, "'")
@@ -1661,7 +1666,6 @@ setMethod(f="plot",
                       ## for the contour or image plot.
                       for (i in 1:numStations) {
                           thisStation <- x[["station", i]]
-                          ##oceDebug(debug, "filling matrix with \"", variable, "\" data at station", i, "\n", sep="")
                           if (variable != "data") {
                               ## CAUTION: the assignment to 'v' and 'zz' is tricky:
                               ## 1. not all datasets will have computed items (e.g. density and potential
@@ -1675,44 +1679,110 @@ setMethod(f="plot",
                               ## and there is a chance of breakage starting at that time.
                               if (drawPoints) {
                                   p <- thisStation[["pressure"]]
-                                  ## Compute sigma0 and sigmaTheta, whether they are in the dataset or not
+                                  # Compute sigma0 and sigmaTheta, whether they are in the dataset or not
+                                  # FIXME: are we catching all the possibilities here?
+                                  # Density variants, then temperature variants, then salinity variants
                                   if (variable == "sigma0") {
                                       v <- swSigma0(thisStation, eos=eos)
+                                      zAllMissing <- FALSE
                                   } else if (variable == "sigmaTheta") {
                                       v <- swSigmaTheta(thisStation, eos=eos)
-                                  } else if (eos == "gsw" && variable == "temperature")
-                                      v <- thisStation[["CT"]]
-                                  else if (eos == "gsw" && variable == "salinity")
-                                      v <- thisStation[["SA"]]
-                                  else if (eos == "unesco" && variable == "potential temperature")
+                                      zAllMissing <- FALSE
+
+                                  } else if (variable == "temperature") { # always means in-situ temperature
+                                      v <- thisStation[["temperature"]]
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "potential temperature" && eos == "unesco") {
                                       v <- thisStation[["theta"]]
-                                  else if (variable %in% names(thisStation[["data"]]))
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "potential temperature" && eos == "gsw") {
+                                      v <- thisStation[["CT"]]
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "conservative temperature") {
+                                      v <- thisStation[["CT"]]
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "practical salinity") { # always means practical salinity
+                                      #message("practical salinity")
+                                      v <- thisStation[["salinity"]]
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "salinity" && eos == "unesco") {
+                                      v <- thisStation[["salinity"]]
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "salinity" && eos == "gsw") {
+                                      v <- thisStation[["SA"]]
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "absolute salinity") {
+                                      v <- thisStation[["SA"]]
+                                      zAllMissing <- FALSE
+
+                                  } else if (variable %in% names(thisStation[["data"]])) {
                                       v <- thisStation[[variable]]
-                                  else
+                                      zAllMissing <- FALSE
+                                  } else {
                                       v <- rep(NA, length(p))
+                                  }
+                                  oceDebug(1+debug, "about to do points() for station i=", i, " (pch=", pch, ",cex=", cex, ")\n")
+                                  if (i == 20) browser("DANNY")
                                   points(rep(xx[i], length(p)), -p,
                                          pch=pch, cex=cex,
-                                         col=zcol[rescale(v, xlow=zlim[1], xhigh=zlim[2], rlow=1, rhigh=nbreaks)])
+                                         col=zcol[rescale(v, xlow=zlim[1], xhigh=zlim[2],
+                                             rlow=1, rhigh=if (is.null(zbreaks)) length(zbreaks) else 100)])
                               } else {
                                   ## Compute sigma0 and sigmaTheta, whether they are in the dataset or not
                                   if (variable == "sigma0") {
+                                      oceDebug(debug, "filling sigma0 matrix at i=", i, "\n")
                                       zz[i, ] <- rev(swSigma0(thisStation, eos=eos))
+                                      zAllMissing <- FALSE
                                   } else if (variable == "sigmaTheta") {
+                                      oceDebug(debug, "filling sigmaTheta matrix at i=", i, "\n")
                                       zz[i, ] <- rev(swSigmaTheta(thisStation, eos=eos))
-                                  } else if (eos == "gsw" && variable == "temperature") {
-                                      zz[i, ] <- rev(thisStation[["CT"]])
-                                  } else if (eos == "gsw" && variable == "salinity") {
-                                      zz[i, ] <- rev(thisStation[["SA"]])
-                                  } else if (eos == "unesco" && variable == "potential temperature") {
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "in-situ temperature") {
+                                      oceDebug(debug, "filling in-situ temperature matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["temperature"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "temperature") {
+                                      oceDebug(debug, "filling in-situ temperature matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["temperature"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "potential temperature" && eos == "unesco") {
+                                      oceDebug(debug, "filling theta matrix at i=", i, "\n")
                                       zz[i, ] <- rev(thisStation[["theta"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "potential temperature" && eos == "gsw") {
+                                      oceDebug(debug, "filling conservative temperature matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["CT"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "conservative temperature") {
+                                      oceDebug(debug, "filling conservative temperature matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["CT"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "absolute salinity") {
+                                      oceDebug(debug, "filling absolute salinity matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["SA"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "practical salinity") {
+                                      oceDebug(debug, "filling practical salinity matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["salinity"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "salinity" && eos == "unesco") {
+                                      oceDebug(debug, "filling practical salinity matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["salinity"]])
+                                      zAllMissing <- FALSE
+                                  } else if (variable == "salinity" && eos == "gsw") {
+                                      oceDebug(debug, "filling absolute salinity matrix at i=", i, "\n")
+                                      zz[i, ] <- rev(thisStation[["SA"]])
+                                      zAllMissing <- FALSE
                                   } else {
                                       ##. message("variable=",variable)
                                       ##. message("names=", paste(names(thisStation@data), collapse=","))
-                                      zz[i, ] <- if (variable %in% names(thisStation[["data"]])) {
-                                          rev(thisStation[[variable]])
+                                      if (variable %in% names(thisStation[["data"]])) {
+                                          zz[i, ] <- rev(thisStation[[variable]])
+                                          zAllMissing <- FALSE
                                       } else {
-                                          rep(NA, length(thisStation[["pressure"]]))
+                                          zz[i, ] <- rep(NA, length(thisStation[["pressure"]]))
                                       }
+
                                       ## message("zz[",i,",]:", paste(head(zz[i,]), collapse=" "))
                                   }
                                   ## if (all(dim(zz) > 2)) {
@@ -2052,33 +2122,68 @@ setMethod(f="plot",
                   ## See whether we have this item in station 1 (directly, or by calculation)
                   oceDebug(debug, "which[", w, "]=", which[w], "\n", sep="")
                   station1 <- x[["station", 1]]
-                  haveWhich <- length(station1[[which[w]]]) || which[w] == "map"
+                  haveWhich <- length(station1[[which[w]]]) || which[w] %in% c("map", "absolute salinity",
+                      "practical salinity", "in-situ temperature", "potential temperature", "conservative temperature")
                   unit <- station1[[paste(which[w], "Unit", sep="")]][[1]]
                   if (!haveWhich)
                       stop("in plot(section) : no '", which[w], "' in data; try one of c(\"", paste(names(station1[["data"]]), collapse="\",\""),
                            "\") or something that can be calculated from these", call.=FALSE)
                   if (!missing(contourLevels)) {
+                      oceDebug(debug, "contourLevels was provided\n")
                       contourLabels <- format(contourLevels)
                       if (which[w] == "temperature") {
-                          oceDebug(debug, "plotting temperature with contourLevels provided\n")
+                          oceDebug(debug, "plotting in-situ temperature with contourLevels provided\n")
                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
                                          "temperature",
-                                         if (eos=="unesco") "T" else expression(Theta),
+                                         expression("T ["*degree*"C]"),
                                          unit=unit,
                                          eos=eos, ylab="",
                                          levels=contourLevels, labels=contourLabels, xlim=xlim, ylim=ylim, ztype=ztype,
                                          axes=axes, col=col, debug=debug-1, ...)
-                      } else if (which[w] == "potential temperature") {
+                      } else if (which[w] == "in-situ temperature") {
+                          oceDebug(debug, "plotting in-situ temperature with contourLevels provided\n")
+                          plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                                         "temperature",
+                                         expression("T ["*degree*"C]"),
+                                         unit=unit,
+                                         eos=eos, ylab="",
+                                         levels=contourLevels, labels=contourLabels, xlim=xlim, ylim=ylim, ztype=ztype,
+                                         axes=axes, col=col, debug=debug-1, ...)
+                       } else if (which[w] == "potential temperature") {
                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
                                          "potential temperature",
-                                         if (eos=="unesco") expression(theta*" ["*degree*"]") else expression(S[A]),
+                                         if (eos=="unesco")
+                                             expression(theta*" ["*degree*"]")
+                                         else
+                                             expression(Theta*" ["*degree*"]"),
                                          unit=unit,
                                          eos=eos, ylab="",
                                          levels=contourLevels, labels=contourLabels,  xlim=xlim, ylim=ylim,
                                          axes=axes, col=col, debug=debug-1, ...)
-                       } else if (which[w] == "salinity") {
+                       } else if (which[w] == "absolute salinity") {
                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
-                                         "salinity", if (eos=="unesco") "S" else expression(S[A]), unit=unit,
+                                         "absolute salinity",
+                                         expression(S[A]*" [g/kg]"),
+                                         unit=unit, # is this ignored?
+                                         eos=eos, ylab="",
+                                         levels=contourLevels, labels=contourLabels,  xlim=xlim, ylim=ylim,
+                                         axes=axes, col=col, debug=debug-1, ...)
+                       } else if (which[w] == "practical salinity") {
+                          plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                                         "practical salinity",
+                                         "S",
+                                         unit=unit,
+                                         eos=eos, ylab="",
+                                         levels=contourLevels, labels=contourLabels,  xlim=xlim, ylim=ylim,
+                                         axes=axes, col=col, debug=debug-1, ...)
+                        } else if (which[w] == "salinity") {
+                          plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                                         "salinity", # FIXME: distinguish between SP and SA
+                                         if (eos == "unesco")
+                                             "S"
+                                         else
+                                             expression(S[A]*" [g/kg]"),
+                                         unit=unit,
                                          eos=eos, ylab="",
                                          levels=contourLevels, labels=contourLabels,  xlim=xlim, ylim=ylim,
                                          axes=axes, col=col, debug=debug-1, ...)
@@ -2090,7 +2195,26 @@ setMethod(f="plot",
                                          axes=axes, col=col, debug=debug-1, ...)
                       }
                    } else {
-                      if (which[w] == "temperature") {
+                      oceDebug(debug, "contourLevels was not provided\n")
+                      if (which[w] == "in-situ temperature") {
+                          oceDebug(debug, "plotting in-situ temperature with contourLevels provided\n")
+                          plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                                         "temperature",
+                                         expression("T ["*degree*"C]"),
+                                         unit=unit,
+                                         eos=eos, ylab="",
+                                         xlim=xlim, ylim=ylim, ztype=ztype,
+                                         axes=axes, col=col, debug=debug-1, ...)
+                      } else if (which[w] == "conservative temperature") {
+                          oceDebug(debug, "plotting conservative temperature with contourLevels provided\n")
+                          plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                                         "conservative temperature",
+                                         expression(Theta*" ["*degree*"C]"),
+                                         unit=unit,
+                                         eos=eos, ylab="",
+                                         xlim=xlim, ylim=ylim, ztype=ztype,
+                                         axes=axes, col=col, debug=debug-1, ...)
+                      } else if (which[w] == "temperature") {
                           oceDebug(debug, "plotting temperature with contourLevels not provided\n")
                           ##if (!sum(is.finite(zz))) browser() ### FIXME:1583
                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
@@ -2104,17 +2228,41 @@ setMethod(f="plot",
                       } else if (which[w] == "potential temperature") {
                           oceDebug(debug, "plotting potential temperature with contourLevels not provided\n")
                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
-                                         "potential temperature",
-                                         if (eos=="unesco") expression(theta*" ["*degree*"C]") else expression(Theta),
-                                         unit=unit,
-                                         eos=eos,
-                                         xlim=xlim, ylim=ylim, ztype=ztype,
-                                         zbreaks=zbreaks, zcol=zcol,
-                                         axes=axes, col=col, debug=debug-1, ...)
+                              "potential temperature",
+                              if (eos=="unesco")
+                                  expression(theta*" ["*degree*"C]")
+                              else
+                                  expression(Theta*" ["*degree*"C]"),
+                              unit=unit,
+                              eos=eos,
+                              xlim=xlim, ylim=ylim, ztype=ztype,
+                              zbreaks=zbreaks, zcol=zcol,
+                              axes=axes, col=col, debug=debug-1, ...)
+                       } else if (which[w] == "absolute salinity") {
+                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                               "absolute salinity",
+                               expression(S[A]*" [g/kg]"),
+                               unit=unit,
+                               eos=eos,
+                               xlim=xlim, ylim=ylim, ztype=ztype,
+                               zbreaks=zbreaks, zcol=zcol,
+                               axes=axes, col=col, debug=debug-1, ...)
+                       } else if (which[w] == "practical salinity") {
+                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
+                               "practical salinity",
+                               "S",
+                               unit=unit,
+                               eos=eos,
+                               xlim=xlim, ylim=ylim, ztype=ztype,
+                               zbreaks=zbreaks, zcol=zcol,
+                               axes=axes, col=col, debug=debug-1, ...)
                        } else if (which[w] == "salinity") {
                           plotSubsection(xx, yy, zz, which.xtype, which.ytype,
                                          "salinity",
-                                         if (eos == "unesco") "S" else expression(S[A]),
+                                         if (eos == "unesco")
+                                             "S"
+                                         else
+                                             expression(S[A]*" [g/kg]"),
                                          unit=unit,
                                          eos=eos,
                                          xlim=xlim, ylim=ylim, ztype=ztype,
@@ -2640,7 +2788,7 @@ sectionGrid <- function(section, p, method="approx", trim=TRUE, debug=getOption(
     ##warningMessages <- NULL
     n <- length(section@data$station)
     nxg <- n
-    oceDebug(debug, "have", n, "stations in this section\n")
+    oceDebug(debug, "have ", n, " stations in this section\n")
     dp.list <- NULL
     pMax <- max(section[["pressure"]], na.rm=TRUE)
     if (missing(p)) {
