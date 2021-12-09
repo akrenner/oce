@@ -18,6 +18,16 @@ test_that("section[['z']] == -section[['depth']]", {
     expect_equal(z, -depth)
 })
 
+test_that("[[,section-method uses [[,ctd-method when needed", {
+    data(section)
+    sigma1A <- section[["sigma1"]]
+    sigma1B <- section[["sigma1", "byStation"]]
+    expect_equal(sigma1A, unlist(sigma1B))
+    # check against directly-computed value
+    ctd <- section[["station", 1]]
+    expect_equal(sigma1B[[1]], ctd[["sigma1"]])
+})
+
 test_that("section[[...]] and [[..., \"byStation\"]] work", {
     data(section)
     for (i in c("CT", "depth", "nitrate", "nitrite", "oxygen",

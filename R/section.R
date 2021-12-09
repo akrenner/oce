@@ -347,6 +347,7 @@ setMethod(f="[[",
           definition=function(x, i, j, ...) {
               ## Data-quality flags are a special case
               res <- NULL
+              #. message("[[,section-method with i=",i)
               if (1 == length(grep(".*Flag$", i))) {
                   baseName <- gsub("Flag$", "", i)
                   if (baseName %in% names(x@data$station[[1]]@metadata$flags)) {
@@ -363,6 +364,7 @@ setMethod(f="[[",
               ##20160809     return(res)
               ##20160809 }
               if (i %in% names(x@metadata)) {
+                  #. message("[[,section-method case 1: metadata")
                   if (i %in% c("longitude", "latitude")) {
                       if (!missing(j) && j == "byStation") {
                           return(x@metadata[[i]])
@@ -380,7 +382,7 @@ setMethod(f="[[",
                                   "potential temperature", "SA", "sigmaTheta",
                                   "spice", "theta", "z",
                                   names(x@data$station[[1]]@data))) {
-                  ##message('section.R:311 section[["', i, '"]]')
+                  #. message("[[,section-method case 2: data or some particular other things")
                   if (!missing(j) && substr(j, 1, 4) == "grid") {
                       if (j == "grid:distance-pressure") {
                           numStations <- length(x@data$station)
@@ -410,17 +412,17 @@ setMethod(f="[[",
                   } else {
                       ## Note that nitrite and nitrate might be computed, not stored
                       if (!missing(j) && j == "byStation") {
-                          ##message("section[['", i, "', 'byStation']] START")
+                          #. message("section[['", i, "', 'byStation']] START")
                           res <- vector("list", nstation)
                           for (istation in seq_len(nstation))
                               res[[istation]] <- x@data$station[[istation]][[i]]
-                          ##message("section[['", i, "', 'byStation']] END")
+                          #. message("section[['", i, "', 'byStation']] END")
                       } else {
-                          ##message("section[['", i, "']] START")
+                          #. message("section[['", i, "']] START")
                           res <- NULL
                           for (station in x[["station"]])
                               res <- c(res, station[[i]])
-                          ##message("section[['", i, "']] END")
+                          #. message("section[['", i, "']] END")
                       }
                       return(res)
                   }
@@ -472,11 +474,22 @@ setMethod(f="[[",
 
                   }
               } else if ("time" == i) {
-                  ## time is not in the overall metadata ... look in the individual objects
+                  # time is not in the overall metadata ... look in the individual objects
                   res <- unlist(lapply(x@data$station, function(stn) stn[["time"]]))
                   res <- numberAsPOSIXct(res)
               } else {
-                  res <- callNextMethod()     # [[
+                  # as a last option, try [[,ctd-method (used to be callNextMethod, but
+                  # that was seen to be erroneous on 2021-12-09
+                  message("[[,section-method trying [[,ctd-method for i=", i,"]]")
+                  if (!missing(j) && j == "byStation") {
+                      res <- vector("list", nstation)
+                      for (istation in seq_len(nstation))
+                          res[[istation]] <- x@data$station[[istation]][[i]]
+                  } else {
+                      res <- NULL
+                      for (station in x[["station"]])
+                          res <- c(res, station[[i]])
+                  }
               }
               res
           })
@@ -1279,7 +1292,7 @@ setMethod(f="plot",
           {
               if (missing(debug))
                   debug <- getOption("oceDebug")
-              debug <- if (debug > 4) 4 else floor(0.5 + debug)
+              debug <- if (debug > 4) 4L else floor(0.5 + debug)
               if (missing(eos))
                   eos <- getOption("oceEOS", default="gsw")
               xtype <- match.arg(xtype, c("distance", "track", "longitude", "latitude", "time", "spine"))
@@ -1335,6 +1348,7 @@ setMethod(f="plot",
               ## Ensure data on levels, for plots requiring pressure (e.g. sections). Note
               ## that we break out of the loop, once we grid the section.
               if (is.na(which[1]) || which[1] != "data" || which[1] != 'map') {
+                  oceDebug(debug, "check that pressures are identical across stations\n")
                   p1 <- x[["station", 1]][["pressure"]]
                   numStations <- length(x@data$station)
                   for (ix in 2:numStations) {
@@ -1392,6 +1406,7 @@ setMethod(f="plot",
                   canPlot <- TRUE      # assume we can plot; use this instead of nested 'break's
 
                   if (variable == "map") {
+                      oceDebug(debug, "plotting a map\n")
                       lat <- array(NA_real_, numStations)
                       lon <- array(NA_real_, numStations)
                       for (i in 1:numStations) {
@@ -1549,7 +1564,9 @@ setMethod(f="plot",
                           ## text(xlab, ylab, x@metadata$stationId[numStations])
                       }
                   } else {
+                      oceDebug(debug, "plotting a non-map\n")
                       ## not a map
+                      DAN<<-x
                       zAllMissing <- all(is.na(x[[variable]]))
                       ##> message("zAllMissing=", zAllMissing)
                       ##> message("drawPoints=", drawPoints)
@@ -1674,6 +1691,7 @@ setMethod(f="plot",
                               ## https://github.com/dankelley/oce/issues/1540
                               ## and there is a chance of breakage starting at that time.
                               if (drawPoints) {
+                                  if (i == 1L) oceDebug(debug, "handling drawPoints=TRUE case\n")
                                   p <- thisStation[["pressure"]]
                                   ## Compute sigma0 and sigmaTheta, whether they are in the dataset or not
                                   if (variable == "sigma0") {
@@ -1694,9 +1712,18 @@ setMethod(f="plot",
                                          pch=pch, cex=cex,
                                          col=zcol[rescale(v, xlow=zlim[1], xhigh=zlim[2], rlow=1, rhigh=nbreaks)])
                               } else {
-                                  ## Compute sigma0 and sigmaTheta, whether they are in the dataset or not
+                                  if (i == 1L) oceDebug(debug, "handling drawPoints=FALSE case\n")
+                                  ## Compute sigma[0:4] and sigmaTheta, whether they are in the dataset or not
                                   if (variable == "sigma0") {
                                       zz[i, ] <- rev(swSigma0(thisStation, eos=eos))
+                                  } else if (variable == "sigma1") {
+                                      zz[i, ] <- rev(swSigma1(thisStation, eos=eos))
+                                  } else if (variable == "sigma2") {
+                                      zz[i, ] <- rev(swSigma2(thisStation, eos=eos))
+                                  } else if (variable == "sigma3") {
+                                      zz[i, ] <- rev(swSigma3(thisStation, eos=eos))
+                                  } else if (variable == "sigma4") {
+                                      zz[i, ] <- rev(swSigma4(thisStation, eos=eos))
                                   } else if (variable == "sigmaTheta") {
                                       zz[i, ] <- rev(swSigmaTheta(thisStation, eos=eos))
                                   } else if (eos == "gsw" && variable == "temperature") {
@@ -1706,6 +1733,7 @@ setMethod(f="plot",
                                   } else if (eos == "unesco" && variable == "potential temperature") {
                                       zz[i, ] <- rev(thisStation[["theta"]])
                                   } else {
+                                      oceDebug(debug, "non-special case, variable\"", variable, "\"\n", sep="")
                                       ##. message("variable=",variable)
                                       ##. message("names=", paste(names(thisStation@data), collapse=","))
                                       zz[i, ] <- if (variable %in% names(thisStation[["data"]])) {
@@ -1784,6 +1812,7 @@ setMethod(f="plot",
                       yy.unique <- yy.unique & !is.na(yy.unique)
                       ## a problem with mbari data revealed that we need to chop NA valaues too
                       if (variable == "data") {
+                          oceDebug(debug, "handling variable=='data' case\n")
                           for (i in 1:numStations) {
                               thisStation <- x[["station", i]]
                               pressure <- thisStation[["pressure"]]
@@ -1796,6 +1825,7 @@ setMethod(f="plot",
                               }
                           }
                       } else if (!drawPoints) {
+                          oceDebug(debug, "handling variable!='data' case; zAllMissing=", zAllMissing, "\n")
                           ## Use try() to quiet warnings if all data are NA
                           if (zAllMissing) {
                               if (nchar(legend.loc)) {
@@ -1809,6 +1839,7 @@ setMethod(f="plot",
                               return()
                           }
                           zrange <- try(range(zz[xx.unique, yy.unique], na.rm=TRUE), silent=TRUE)
+                          message("zrange=",paste(zrange,collapse=" "))
                           if (!is.null(contourLevels) && !is.null(contourLabels)) {
                               oceDebug(debug, "user-supplied contourLevels: ", contourLevels, "\n")
                               if (ztype == 'contour') {
@@ -2640,7 +2671,7 @@ sectionGrid <- function(section, p, method="approx", trim=TRUE, debug=getOption(
     ##warningMessages <- NULL
     n <- length(section@data$station)
     nxg <- n
-    oceDebug(debug, "have", n, "stations in this section\n")
+    oceDebug(debug, "have ", n, " stations in this section\n", sep="")
     dp.list <- NULL
     pMax <- max(section[["pressure"]], na.rm=TRUE)
     if (missing(p)) {
