@@ -1281,7 +1281,7 @@ setMethod(f="plot",
                               axes=TRUE, mgp, mar,
                               col, cex, pch,
                               labcex=1,
-                             # transect=NULL,
+                              transect=NULL,
                               debug, ...)
           {
               if (missing(debug))
@@ -1377,7 +1377,7 @@ setMethod(f="plot",
                                          legend=TRUE,
                                          debug=0,
                                          axes=TRUE,
-                                         # transect=NULL,
+                                         transect=NULL,
                                          col=par("col"),
                                          ...)
               {
@@ -1592,16 +1592,10 @@ setMethod(f="plot",
                       }
 
 
-                      if (class (transect) != "NULL"){  ## FIX - MR -- need to dfine xxrange and yyrange from transect -- test
-                          # xxrange <- range (transect@data$coordinates [,1], na.rm = TRUE)
-                          # yyrange <- range (transect@data$coordinates [,2], na.rm = TRUE)
-                          xxrange <- range (transect$longitude, na.rm = TRUE)
-                          yyrange <- range (transect$latitude, na.rm = TRUE)
-                      }else{
+                      ## MR: does this need modification for transects ? XXX
                       ## FIXME: contours don't get to plot edges
                       xxrange <- range(xx, na.rm=TRUE)
                       yyrange <- range(yy, na.rm=TRUE)
-                      }
 
                       ylim <- if (!is.null(ylim)) sort(-abs(ylim)) else yyrange
                       par(xaxs="i", yaxs="i")
@@ -1955,7 +1949,7 @@ setMethod(f="plot",
               zz <- array(NA_real_, dim=c(numStations, num.depths))
               xx <- rep(NA, numStations)
               yy <- rep(NA, num.depths)
-              # if (class (transect) == "NULL"){
+              # if (class (transect) == "NULL"){  ## reimplement or made addition XXX
               if (is.null(at)) {
                   lon0 <- if (missing(longitude0)) mean(firstStation[["longitude"]], na.rm=TRUE) else longitude0
                   lat0 <- if (missing(latitude0)) mean(firstStation[["latitude"]], na.rm=TRUE) else latitude0
@@ -1997,7 +1991,7 @@ setMethod(f="plot",
               } else {
                   xx <- at
               }
-              #}else{
+              #}else{   # XXX
               #    ## map xx station locations onto transect distance
               #}
               ##> message("which.xtype: ", which.xtype)
@@ -2029,7 +2023,7 @@ setMethod(f="plot",
                                                      }))
                   }
                   ## Map points back to the spine
-                  #if (class (transect)!="NULL"){
+                  #if (class (transect)!="NULL"){  ## need to do this with spine? XXX
                       ## map xx onto distance along transect rather than geoDist
                   #}else{
                   longitudeRemapped <- lonfun(ss[closest])
