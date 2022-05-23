@@ -3415,3 +3415,29 @@ longitudeTighten <- function(section)
     res
 }
 
+
+#' Extend incomplete transect to the full length by adding dummy casts where
+#' stations were missed.
+#'
+#' [extendSection]
+#'
+#' This function is needed when sections are run on pre-defined transect
+#' and some sections are incomplete, e.g. due to weather. Adding dummy
+#' casts to where stations were missed should allow plotting the full length
+#' of the transect (rather than rescaling to an incomplete one).
+#'
+#' @param section a [section-class] object
+#'
+#' @param transect a [data-frame] object with the fields latitude, longitude
+#' , stationID. stationID needs to match the stationID in section.
+#'
+#' @return A [section-class] object with the same extend as `transect`.
+#'
+#' @author Martin Renner
+extendSection <- function (section, transect)
+{
+  if (all (names (transect) != c ("latitude", "longitude", "stationID")))
+  {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationID'")
+    }
+# match by stationID or geographic proximity? The later would need a threshold.
+}
