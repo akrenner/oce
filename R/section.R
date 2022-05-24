@@ -3432,7 +3432,8 @@ longitudeTighten <- function(section)
 #'
 #' @author Martin Renner
 cloneCTD <- function (ctd, latitude, longitude
-                      , stationID=NULL, startTime=NULL){
+                      , stationID=NULL, startTime=NULL)
+  {
   data (ctd)
   for (i in 1:length (ctd@data)){
     is.na (ctd@data[[i]]) <- TRUE
@@ -3442,10 +3443,14 @@ cloneCTD <- function (ctd, latitude, longitude
 
   if (length (stationID)>0){
     ctd@metadata$station <- stationID
-  }
+  }else {ctd@metadata$station <- NA}
   if (length (startTime)>0){
     ctd@metadata$startTime <- startTime
   }
+  ## zero-out other metadata
+  ctd@metadata$header <- ""
+  ctd@processingLog$time <- ""
+  ctd@processingLog$value <- ""
   return (ctd)
 }
 #'
@@ -3463,14 +3468,31 @@ cloneCTD <- function (ctd, latitude, longitude
 #'
 #' @param transect a [data-frame] object with the fields latitude, longitude
 #' , stationID. stationID needs to match the stationID in section.
+#' @param parameters to be passed on to sectionSort() to specify how the resultant
+#' expanded section should be sorted.
 #'
 #' @return A [section-class] object with the same extend as `transect`.
 #'
 #' @author Martin Renner
-extendSection <- function (section, transect)
+extendSection <- function (section, transect, ...)
 {
   if (all (names (transect) != c ("latitude", "longitude", "stationID")))
   {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationID'")
-    }
-# match by stationID or geographic proximity? The later would need a threshold.
+  }
+  ## match by stationID or geographic proximity? The later would need a threshold.
+  ## determine whether section represents a complete transect
+  ## will have to sectionSort at the end!!
+  for (i in 1:length (transect$stationID))
+  {if (any (section@metadata$station == transect$stationID [i]))
+  {
+    ## add a dummy-station
+    section <- sectionAddCtd (section, cloneCTD(section [[1]]
+                                                , latitude=transect$latitude [i]
+                                                , longitude=transect$longitude [i]
+                                                , sectionID=transect$sectionID [i])
+    )
+  }
+  }
+  section <- sectionSort (section, ...)
+  return (section)
 }
