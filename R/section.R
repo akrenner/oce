@@ -3416,6 +3416,39 @@ longitudeTighten <- function(section)
 }
 
 
+#' Clone CTD-cast, resulting in a new cast, but with all measurement fields left empty.
+#' Need this to create dummy casts for incomplete transects.
+#'
+#' [cloneCTD]
+#'
+#' @param ctd a [ctd-class] object
+#'
+#' @param depth
+#' @param stationID
+#' @param latitude
+#' @param longitude
+#'
+#' @return A [ctd] object
+#'
+#' @author Martin Renner
+cloneCTD <- function (ctd, latitude, longitude
+                      , stationID=NULL, startTime=NULL){
+  data (ctd)
+  for (i in 1:length (ctd@data)){
+    is.na (ctd@data[[i]]) <- TRUE
+  }
+  ctd@metadata$latitude <- latitude
+  ctd@metadata$longitude <- longitude
+
+  if (length (stationID)>0){
+    ctd@metadata$station <- stationID
+  }
+  if (length (startTime)>0){
+    ctd@metadata$startTime <- startTime
+  }
+  return (ctd)
+}
+#'
 #' Extend incomplete transect to the full length by adding dummy casts where
 #' stations were missed.
 #'
