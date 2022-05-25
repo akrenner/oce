@@ -3448,9 +3448,9 @@ cloneCTD <- function (ctd, latitude, longitude
     ctd@metadata$startTime <- startTime
   }
   ## zero-out other metadata
-  ctd@metadata$header <- ""
-  ctd@processingLog$time <- ""
-  ctd@processingLog$value <- ""
+  # ctd@metadata$header <- ""
+  # ctd@processingLog$time <- ""
+  # ctd@processingLog$value <- ""
   return (ctd)
 }
 
@@ -3458,7 +3458,7 @@ cloneCTD <- function (ctd, latitude, longitude
 #' Extend incomplete transect to the full length by adding dummy casts where
 #' stations were missed.
 #'
-#' [extendSection]
+#' [sectionPad]
 #'
 #' This function is needed when sections are run on pre-defined transect
 #' and some sections are incomplete, e.g. due to weather. Adding dummy
@@ -3475,25 +3475,30 @@ cloneCTD <- function (ctd, latitude, longitude
 #' @return A [section-class] object with the same extend as `transect`.
 #'
 #' @author Martin Renner
-extendSection <- function (section, transect, ...)
+sectionPad <- function (section, transect, ...)
 {
-  if (all (names (transect) != c ("latitude", "longitude", "stationId")))
-  {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationId'")
+  ## missing feature: bottom-depth of missing cast XXX
+
+  if (!all (names (transect) == c ("stationID", "latitude", "longitude")))
+  {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationID'")
   }
   ## match by stationID or geographic proximity? The later would need a threshold.
   ## determine whether section represents a complete transect
   ## will have to sectionSort at the end!!
-  for (i in 1:length (transect$stationID))
-  {if (any (section@metadata$stationId == transect$stationId [i]))
+  for (i in 1:length (levels (factor (transect$stationID))))
+  {if (!transect$stationID [i]  %in% section@metadata$stationID)
   {
     ## add a dummy-station
-    section <- sectionAddCtd (section, cloneCTD(section [[1]]
+    section <- sectionAddCtd (section, cloneCTD(section@data$station [[1]]
                                                 , latitude=transect$latitude [i]
                                                 , longitude=transect$longitude [i]
-                                                , sectionId=transect$sectionId [i])
+                                                , stationID=transect$stationID [i]
+                                                # , depth
+    )
     )
   }
   }
   # section <- sectionSort (section, ...)
+  ## warnings: make sure sectionSort is called next!
   return (section)
 }
