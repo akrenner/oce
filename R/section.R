@@ -3453,7 +3453,8 @@ cloneCTD <- function (ctd, latitude, longitude
   ctd@processingLog$value <- ""
   return (ctd)
 }
-#'
+
+
 #' Extend incomplete transect to the full length by adding dummy casts where
 #' stations were missed.
 #'
@@ -3476,23 +3477,23 @@ cloneCTD <- function (ctd, latitude, longitude
 #' @author Martin Renner
 extendSection <- function (section, transect, ...)
 {
-  if (all (names (transect) != c ("latitude", "longitude", "stationID")))
-  {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationID'")
+  if (all (names (transect) != c ("latitude", "longitude", "stationId")))
+  {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationId'")
   }
   ## match by stationID or geographic proximity? The later would need a threshold.
   ## determine whether section represents a complete transect
   ## will have to sectionSort at the end!!
   for (i in 1:length (transect$stationID))
-  {if (any (section@metadata$station == transect$stationID [i]))
+  {if (any (section@metadata$stationId == transect$stationId [i]))
   {
     ## add a dummy-station
     section <- sectionAddCtd (section, cloneCTD(section [[1]]
                                                 , latitude=transect$latitude [i]
                                                 , longitude=transect$longitude [i]
-                                                , sectionID=transect$sectionID [i])
+                                                , sectionId=transect$sectionId [i])
     )
   }
   }
-  section <- sectionSort (section, ...)
+  # section <- sectionSort (section, ...)
   return (section)
 }
