@@ -1420,13 +1420,15 @@ setMethod(f="plot",
         res <- x # will now be gridded (either originally or through above code)
 
         ## Trim stations that have zero good data FIXME: brittle to addition of new metadata
-        haveData <- unlist(lapply(x@data$station,
-                function(stn) 0 < length(stn[['pressure']])))
-        x@data$station <- x@data$station[haveData]
-        x@metadata$stationId <- x@metadata$stationId[haveData]
-        x@metadata$latitude <- x@metadata$latitude[haveData]
-        x@metadata$longitude <- x@metadata$longitude[haveData]
-        x@metadata$time <- x@metadata$time[haveData]
+        # MR: don't do this -- instead, make plotSubsection resilient to NAs.
+        # issue an error if all stations no good data?
+        # haveData <- unlist(lapply(x@data$station,
+        #         function(stn) 0 < length(stn[['pressure']])))
+        # x@data$station <- x@data$station[haveData]
+        # x@metadata$stationId <- x@metadata$stationId[haveData]
+        # x@metadata$latitude <- x@metadata$latitude[haveData]
+        # x@metadata$longitude <- x@metadata$longitude[haveData]
+        # x@metadata$time <- x@metadata$time[haveData]
         plotSubsection <- function(xx, yy, zz,
             which.xtype, which.ytype,
             variable="temperature", vtitle="T", unit=NULL,
@@ -1458,6 +1460,7 @@ setMethod(f="plot",
             omar <- par('mar')
             xIsTime <- inherits(xx, "POSIXt")
 
+            # MR: if (length (goodstations) >1){canPlot <- TRUE}
             canPlot <- TRUE      # assume we can plot; use this instead of nested 'break's
 
             if (as.character(variable) == "map") {
@@ -1772,6 +1775,7 @@ setMethod(f="plot",
                     } else {
                         wd <- NA
                     }
+                    ## MR: in.land is not used -- delete?
                     in.land <- which(is.na(x@data$station[[stationIndices[i]]]@data$temperature[-3])) # skip first 3 points
                     waterDepth <- c(waterDepth, wd)
                 }
@@ -1789,7 +1793,7 @@ setMethod(f="plot",
                     xx <- xx[ox]
                     zz <- zz[ox, ] ## FIXME keep this???
                     ii <- ii[ox]
-                    bottom.x <- c(min(xxOrig), xxOrig[ox], max(xxOrig))
+                    bottom.x <- c(min(xxOrig, na.rm=TRUE), xxOrig[ox], max(xxOrig, na.rm=TRUE))
                     bottom.y <- c(graph.bottom, -waterDepth[ox], graph.bottom)
                 }
                 # cannot contour with duplicates in x or y; the former is the only problem
@@ -3431,12 +3435,16 @@ longitudeTighten <- function(section)
 #' @return A [ctd] object
 #'
 #' @author Martin Renner
-cloneCTD <- function (ctd, latitude, longitude
-                      , stationID=NULL, startTime=NULL)
-  {
-  data (ctd)
+cloneCTD <- function (ctd, latitude=ctd@metadata$latitude
+                      , longitude=ctd@metadata$longitude
+                      , stationID=NULL, startTime=NULL
+                      , bottom=NULL){
+  # data (ctd)
+  ## NA-out all data, other than depth and pressure
   for (i in 1:length (ctd@data)){
-    is.na (ctd@data[[i]]) <- TRUE
+    if (names (ctd@data)[i] != "pressure"){
+      is.na (ctd@data[[i]]) <- TRUE
+    }
   }
   ctd@metadata$latitude <- latitude
   ctd@metadata$longitude <- longitude
@@ -3447,10 +3455,13 @@ cloneCTD <- function (ctd, latitude, longitude
   if (length (startTime)>0){
     ctd@metadata$startTime <- startTime
   }
+  if (length (bottom)>0){
+    ctd@metadata$waterDepth <- bottom
+  }
   ## zero-out other metadata
-  # ctd@metadata$header <- ""
-  # ctd@processingLog$time <- ""
-  # ctd@processingLog$value <- ""
+  ctd@metadata$header <- ""
+  ctd@processingLog$time <- ""
+  ctd@processingLog$value <- ""
   return (ctd)
 }
 
@@ -3475,30 +3486,28 @@ cloneCTD <- function (ctd, latitude, longitude
 #' @return A [section-class] object with the same extend as `transect`.
 #'
 #' @author Martin Renner
-sectionPad <- function (section, transect, ...)
-{
-  ## missing feature: bottom-depth of missing cast XXX
+sectionPad <- function (section, transect, ...){
+    ## missing feature: bottom-depth of missing cast XXX
 
-  if (!all (names (transect) == c ("stationID", "latitude", "longitude")))
-  {stop ("transect needs to have fields 'latitude', 'longitude', and 'stationID'")
-  }
-  ## match by stationID or geographic proximity? The later would need a threshold.
-  ## determine whether section represents a complete transect
-  ## will have to sectionSort at the end!!
-  for (i in 1:length (levels (factor (transect$stationID))))
-  {if (!transect$stationID [i]  %in% section@metadata$stationID)
-  {
-    ## add a dummy-station
-    section <- sectionAddCtd (section, cloneCTD(section@data$station [[1]]
-                                                , latitude=transect$latitude [i]
-                                                , longitude=transect$longitude [i]
-                                                , stationID=transect$stationID [i]
-                                                # , depth
-    )
-    )
-  }
-  }
-  # section <- sectionSort (section, ...)
-  ## warnings: make sure sectionSort is called next!
-  return (section)
+    if (!all (c ("stationID", "latitude", "longitude")  %in% names (transect))){
+        stop ("transect needs to have fields 'latitude', 'longitude', and 'stationID'")
+    }
+    ## match by stationID or geographic proximity? The later would need a threshold.
+    ## determine whether section represents a complete transect
+    ## will have to sectionSort at the end!!
+    for (i in 1:length (levels (factor (transect$stationID)))){
+        if (!transect$stationID [i]  %in% levels (section@metadata$station)){
+            ## add a dummy-station  (sectionAddCtd and sectionAddStation are synonymous)
+            section <- sectionAddCtd (section, cloneCTD(section@data$station [[1]]
+                                                        , latitude=transect$latitude [i]
+                                                        , longitude=transect$longitude [i]
+                                                        , stationID=transect$stationID [i]
+                                                        , bottom=transect$bottom [i]
+            )
+            )
+        }
+    }
+    # section <- sectionSort (section, ...)
+    ## warnings: make sure sectionSort is called next!
+    return (section)
 }
